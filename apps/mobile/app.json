@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Mentivax",
+    "slug": "mentivax",
+    "scheme": "mentivax",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "primaryColor": "#0E7C5B",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0E7C5B"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mentivax.mobile"
+    },
+    "android": {
+      "package": "com.mentivax.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#0E7C5B"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}

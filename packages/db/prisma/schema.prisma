@@ -1,0 +1,381 @@
+// Mentivax — School ERP data model.
+//
+// Multi-tenancy: single shared database. Every tenant-owned row carries an
+// `organizationId`. The API derives the active organization from the request's
+// auth context and scopes every query to it (see apps/api/src/tenant).
+//
+// Money: all monetary amounts are stored as INTEGER MINOR UNITS (paise).
+// ₹14,000.00 is stored as 1_400_000. Conversion helpers live in @mentivax/core.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy & identity
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(cuid())
+  /// URL-safe unique slug, e.g. "agaram-global"
+  slug      String   @unique
+  name      String
+  /// Short badge shown in the UI, e.g. "AG"
+  shortCode String
+  /// ISO 4217, defaults to Indian Rupee
+  currency  String   @default("INR")
+  timezone  String   @default("Asia/Kolkata")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships   Membership[]
+  academicYears AcademicYear[]
+  classes       SchoolClass[]
+  feeTypes      FeeType[]
+  feeStructures FeeStructure[]
+  students      Student[]
+  invoiceBatches InvoiceBatch[]
+  invoices      Invoice[]
+  payments      Payment[]
+  modules       OrganizationModule[]
+}
+
+// ---------------------------------------------------------------------------
+// Plug-in / plug-out: per-org module entitlements
+// ---------------------------------------------------------------------------
+
+enum ModuleStatus {
+  ACTIVE
+  TRIAL
+  SUSPENDED
+}
+
+/// Which modules an organization has plugged in. The catalog of modules that
+/// *exist* is code-defined in @mentivax/core (MODULES); this table records what
+/// each org has enabled. Core modules are always on and need no row here.
+model OrganizationModule {
+  id             String       @id @default(cuid())
+  organizationId String
+  /// Module key from the @mentivax/core catalog (e.g. "fees").
+  moduleKey      String
+  status         ModuleStatus @default(ACTIVE)
+  enabledAt      DateTime     @default(now())
+  /// Null = no expiry. Past = treated as not enabled.
+  expiresAt      DateTime?
+  /// Module-specific sub-feature flags / settings, e.g. { whatsappReminders: true }.
+  config         Json?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, moduleKey])
+  @@index([organizationId])
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  name         String
+  /// Hashed password. Auth is a stub in this scaffold.
+  passwordHash String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  memberships  Membership[]
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  ACCOUNTANT
+  TEACHER
+  VIEWER
+}
+
+/// Links a user to an organization with a role. A user may belong to many orgs.
+model Membership {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String
+  role           Role         @default(ADMIN)
+  createdAt      DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// Academic structure
+// ---------------------------------------------------------------------------
+
+model AcademicYear {
+  id             String       @id @default(cuid())
+  organizationId String
+  /// e.g. "2026-27"
+  label          String
+  startDate      DateTime
+  endDate        DateTime
+  isActive       Boolean      @default(false)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  classes       SchoolClass[]
+  feeStructures FeeStructure[]
+  students      Student[]
+  invoiceBatches InvoiceBatch[]
+  invoices      Invoice[]
+
+  @@unique([organizationId, label])
+  @@index([organizationId])
+}
+
+model SchoolClass {
+  id             String       @id @default(cuid())
+  organizationId String
+  academicYearId String
+  /// Display name, e.g. "8 STD", "Nursery"
+  name           String
+  /// Sort order (Nursery = 0 ... 12 STD = 14)
+  rank           Int          @default(0)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+
+  students      Student[]
+  feeStructures FeeStructure[]
+
+  @@unique([organizationId, academicYearId, name])
+  @@index([organizationId, academicYearId])
+}
+
+// ---------------------------------------------------------------------------
+// Fees configuration
+// ---------------------------------------------------------------------------
+
+enum FeePeriod {
+  ONE_TIME
+  TERM
+  MONTHLY
+}
+
+/// How a fee is priced across new vs old students.
+enum PricingMode {
+  /// One price for everyone (uses flatAmount).
+  COMMON
+  /// Different price for new vs old admissions (uses newAmount / oldAmount).
+  SPLIT
+}
+
+/// A kind of fee an org charges, e.g. "School Fee", "Van Fee".
+model FeeType {
+  id             String       @id @default(cuid())
+  organizationId String
+  /// Stable key used by the engine, e.g. "year", "books", "store", "van"
+  key            String
+  name           String
+  description    String?
+  period         FeePeriod    @default(ONE_TIME)
+  pricingMode    PricingMode  @default(COMMON)
+  /// Number of periods (2 terms, 11/12 monthly instalments, 1 one-time).
+  periodCount    Int          @default(1)
+  /// If true, only applies to students who opted in (e.g. transport/van).
+  optIn          Boolean      @default(false)
+  /// Display order in the UI.
+  rank           Int          @default(0)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  structures FeeStructure[]
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+}
+
+/// The amount a specific class pays for a specific fee type in a given year.
+model FeeStructure {
+  id             String       @id @default(cuid())
+  organizationId String
+  academicYearId String
+  classId        String
+  feeTypeId      String
+  /// Amounts in paise. For COMMON pricing only flatAmount is used.
+  flatAmount     Int          @default(0)
+  newAmount      Int          @default(0)
+  oldAmount      Int          @default(0)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  schoolClass    SchoolClass  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  feeType        FeeType      @relation(fields: [feeTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, feeTypeId, academicYearId])
+  @@index([organizationId, academicYearId, classId])
+}
+
+// ---------------------------------------------------------------------------
+// Students
+// ---------------------------------------------------------------------------
+
+model Student {
+  id             String       @id @default(cuid())
+  organizationId String
+  academicYearId String
+  classId        String
+  name           String
+  /// New admission this year vs continuing student.
+  isNewAdmission Boolean      @default(false)
+  /// Opted into transport (drives the optIn Van Fee).
+  hasTransport   Boolean      @default(false)
+  parentName     String?
+  phone          String?
+  email          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  schoolClass    SchoolClass  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  invoices Invoice[]
+  payments Payment[]
+
+  @@index([organizationId, academicYearId, classId])
+  @@index([organizationId, name])
+}
+
+// ---------------------------------------------------------------------------
+// Invoicing
+// ---------------------------------------------------------------------------
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  PARTIAL
+  PAID
+  CANCELLED
+}
+
+enum DiscountType {
+  NONE
+  PERCENT
+  FLAT
+}
+
+/// A class-billing run that produced many invoices at once (the wizard).
+model InvoiceBatch {
+  id             String       @id @default(cuid())
+  organizationId String
+  academicYearId String
+  name           String
+  classId        String?
+  issueDate      DateTime
+  dueDate        DateTime
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+
+  invoices Invoice[]
+
+  @@index([organizationId, academicYearId])
+}
+
+model Invoice {
+  id             String        @id @default(cuid())
+  organizationId String
+  academicYearId String
+  studentId      String
+  batchId        String?
+  /// Human-facing number, e.g. "INV-896". Unique per org.
+  number         String
+  name           String
+  issueDate      DateTime
+  dueDate        DateTime
+  status         InvoiceStatus @default(PENDING)
+  /// Cached rollups (paise) — recomputed from lines/allocations on write.
+  grossAmount    Int           @default(0)
+  discountAmount Int           @default(0)
+  netAmount      Int           @default(0)
+  paidAmount     Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  student        Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  batch          InvoiceBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  lines       InvoiceLine[]
+  allocations PaymentAllocation[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, academicYearId, status])
+  @@index([studentId])
+}
+
+model InvoiceLine {
+  id           String       @id @default(cuid())
+  invoiceId    String
+  /// Snapshot of the fee type key/name at issue time.
+  feeKey       String
+  feeName      String
+  period       FeePeriod    @default(ONE_TIME)
+  /// Gross line amount (paise) before discount.
+  grossAmount  Int          @default(0)
+  discountType DiscountType @default(NONE)
+  /// For PERCENT: basis points (e.g. 1000 = 10%). For FLAT: paise.
+  discountValue Int         @default(0)
+  discountAmount Int        @default(0)
+  netAmount    Int          @default(0)
+  /// Per-period breakdown in paise, e.g. [700000, 700000] for two terms.
+  periods      Json?
+  reason       String?
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+// ---------------------------------------------------------------------------
+// Payments
+// ---------------------------------------------------------------------------
+
+enum PaymentMode {
+  CASH
+  UPI
+  BANK_TRANSFER
+  CHEQUE
+  CARD
+}
+
+model Payment {
+  id             String       @id @default(cuid())
+  organizationId String
+  studentId      String
+  /// Receipt number, unique per org.
+  receiptNo      String
+  paidAt         DateTime
+  /// Total amount received (paise).
+  amount         Int
+  mode           PaymentMode  @default(CASH)
+  description    String?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  student        Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  allocations PaymentAllocation[]
+
+  @@unique([organizationId, receiptNo])
+  @@index([organizationId, paidAt])
+  @@index([studentId])
+}
+
+/// Splits a payment across one or more invoices.
+model PaymentAllocation {
+  id        String  @id @default(cuid())
+  paymentId String
+  invoiceId String
+  /// Amount applied to this invoice (paise).
+  amount    Int
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([invoiceId])
+}

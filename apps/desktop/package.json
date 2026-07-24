@@ -1,0 +1,50 @@
+{
+  "name": "@mentivax/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron desktop shell that hosts the Mentivax web app.",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "build:main": "tsc -p tsconfig.main.json",
+    "dev": "pnpm build:main && cross-env ELECTRON_START_URL=http://localhost:5173 electron .",
+    "build": "pnpm build:main",
+    "dist": "electron-builder",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit",
+    "clean": "rm -rf dist-electron release .turbo"
+  },
+  "devDependencies": {
+    "@mentivax/config": "workspace:*",
+    "@types/node": "^20.16.10",
+    "cross-env": "^7.0.3",
+    "electron": "^31.3.0",
+    "electron-builder": "^24.13.3",
+    "typescript": "^5.6.2"
+  },
+  "build": {
+    "appId": "com.mentivax.desktop",
+    "productName": "Mentivax",
+    "files": [
+      "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../web/dist",
+        "to": "web"
+      }
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.education"
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Education"
+    }
+  }
+}
