@@ -8,7 +8,8 @@ services:
       POSTGRES_PASSWORD: mentivax
       POSTGRES_DB: mentivax
     ports:
-      - '5432:5432'
+      # Host 5544 -> container 5432 (5432 is often taken by another Postgres).
+      - '5544:5432'
     volumes:
       - mentivax_pgdata:/var/lib/postgresql/data
     healthcheck:

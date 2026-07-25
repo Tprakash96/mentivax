@@ -28,6 +28,7 @@ export class FeeStructureService {
         period: f.period,
         pricingMode: f.pricingMode,
         periodCount: f.periodCount,
+        dueDate: f.dueDate ? f.dueDate.toISOString() : null,
         optIn: f.optIn,
         flatAmount: s?.flatAmount ?? 0,
         newAmount: s?.newAmount ?? 0,

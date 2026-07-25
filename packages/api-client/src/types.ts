@@ -41,6 +41,8 @@ export interface FeeType {
   period: FeePeriod;
   pricingMode: PricingMode;
   periodCount: number;
+  /** ISO date for DUE_DATE fees; null otherwise. */
+  dueDate?: string | null;
   optIn: boolean;
   rank: number;
 }
@@ -52,6 +54,8 @@ export interface FeeStructureRow {
   period: FeePeriod;
   pricingMode: PricingMode;
   periodCount: number;
+  /** ISO date for DUE_DATE fees; null otherwise. */
+  dueDate?: string | null;
   optIn: boolean;
   flatAmount: number;
   newAmount: number;

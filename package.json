@@ -9,7 +9,10 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter=@mentivax/web --filter=@mentivax/api",
+    "dev:all": "turbo run dev",
+    "dev:desktop": "turbo run dev --filter=@mentivax/desktop",
+    "dev:mobile": "turbo run dev --filter=@mentivax/mobile",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",

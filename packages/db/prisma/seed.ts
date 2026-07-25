@@ -1,7 +1,8 @@
 /**
  * Seeds a demo organization ("Agaram Global School") mirroring the prototype:
- * classes Nursery..12 STD, four fee types, per-class fee structures, and a
- * student roster. Amounts are stored in paise (₹1 = 100).
+ * classes Nursery..12 STD, four fee types, and per-class fee structures. The
+ * roster starts empty — add real students via the app. Amounts are stored in
+ * paise (₹1 = 100).
  *
  * Run: pnpm db:seed
  */
@@ -22,20 +23,6 @@ const FEE_TYPES = [
   { key: 'store', name: 'Store / Uniform', description: 'One-time', period: FeePeriod.ONE_TIME, pricingMode: PricingMode.COMMON, periodCount: 1, optIn: false, rank: 2 },
   { key: 'van', name: 'Van Fee', description: 'Transport · monthly', period: FeePeriod.MONTHLY, pricingMode: PricingMode.COMMON, periodCount: 11, optIn: true, rank: 3 },
 ];
-
-const FIRST_NAMES = [
-  'Aadithya A', 'Dharshan S', 'Dhuvarakha M', 'Hemabhavan R', 'Hemakavin R',
-  'Jaswin M S', 'Kaarmeeka K', 'Kabilan P', 'Lakshana K', 'Rithwin G',
-  'Kishana D', 'Sriathiran P', 'Tharsana A', 'Midhun P K', 'Jayanth G',
-  'Sathyasree G', 'Dhanya T P', 'Saravana Priyan T', 'Kanisteka H M', 'Samrish K',
-];
-
-// Deterministic PRNG so reseeding is stable.
-let sd = 11;
-const rnd = () => {
-  sd = (sd * 1103515245 + 12345) & 0x7fffffff;
-  return sd / 0x7fffffff;
-};
 
 async function main() {
   console.log('Resetting demo data…');
@@ -141,30 +128,9 @@ async function main() {
     );
   }
 
-  // Roster
-  let studentCount = 0;
-  for (let ci = 0; ci < classes.length; ci++) {
-    const cls = classes[ci]!;
-    const n = 8 + Math.floor(rnd() * 7);
-    for (let i = 0; i < n; i++) {
-      const name = FIRST_NAMES[(i + ci) % FIRST_NAMES.length]! + (i >= FIRST_NAMES.length ? ` ${i + 1}` : '');
-      await prisma.student.create({
-        data: {
-          organizationId: org.id,
-          academicYearId: year.id,
-          classId: cls.id,
-          name,
-          isNewAdmission: rnd() < 0.32,
-          hasTransport: rnd() < 0.45,
-          parentName: `Parent of ${name.split(' ')[0]}`,
-          phone: `+9198${String(40000000 + Math.floor(rnd() * 9999999)).slice(0, 8)}`,
-        },
-      });
-      studentCount++;
-    }
-  }
+  // Roster starts empty — add real students via the app (Students → Add student).
 
-  console.log(`Seeded ${classes.length} classes, ${feeTypes.length} fee types, ${studentCount} students.`);
+  console.log(`Seeded ${classes.length} classes, ${feeTypes.length} fee types, 0 students (empty roster).`);
   console.log('Done.');
 }
 

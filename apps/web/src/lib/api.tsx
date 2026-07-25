@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createClient, type MentivaxClient, type Organization } from '@mentivax/api-client';
+import { CORE_MODULE_KEYS } from '@mentivax/core';
 
 const BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:4000') + '/api';
 const ORG_KEY = 'mentivax.orgId';
@@ -57,7 +58,20 @@ export function ApiProvider({ children }: { children: ReactNode }) {
       .then((list) => {
         if (!active) return;
         setOrgs(list);
-        if (!orgIdRef.current && list[0]) setOrg(list[0].id);
+        // Self-heal: if the stored org id is missing or no longer exists (e.g.
+        // the DB was reseeded), adopt the first available org. If there are no
+        // orgs at all, clear the stale id so we stop sending an invalid header.
+        const stored = orgIdRef.current;
+        const storedIsValid = stored ? list.some((o) => o.id === stored) : false;
+        if (!storedIsValid) {
+          if (list[0]) {
+            setOrg(list[0].id);
+          } else {
+            orgIdRef.current = null;
+            localStorage.removeItem(ORG_KEY);
+            setOrgId(null);
+          }
+        }
       })
       .catch(() => void 0)
       .finally(() => active && setLoading(false));
@@ -81,7 +95,12 @@ export function ApiProvider({ children }: { children: ReactNode }) {
   }, [api, orgId, moduleNonce]);
 
   const currentOrg = orgs.find((o) => o.id === orgId) ?? orgs[0] ?? null;
-  const hasModule = useCallback((key: string) => modules.includes(key), [modules]);
+  // Core modules are always available, so nav never vanishes if /modules is
+  // slow or the API is briefly unreachable.
+  const hasModule = useCallback(
+    (key: string) => CORE_MODULE_KEYS.includes(key) || modules.includes(key),
+    [modules],
+  );
 
   return (
     <ApiContext.Provider

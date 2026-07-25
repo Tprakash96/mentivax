@@ -45,6 +45,9 @@ export function periodMeta(fee: Pick<FeeStructureInput, 'period' | 'periodCount'
       }),
     };
   }
+  if (fee.period === 'DUE_DATE') {
+    return { count: 1, labels: ['Due date'] };
+  }
   return { count: 1, labels: ['One-time'] };
 }
 

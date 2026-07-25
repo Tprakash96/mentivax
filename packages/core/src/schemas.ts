@@ -4,7 +4,7 @@
  */
 import { z } from 'zod';
 
-export const feePeriod = z.enum(['ONE_TIME', 'TERM', 'MONTHLY']);
+export const feePeriod = z.enum(['ONE_TIME', 'TERM', 'MONTHLY', 'DUE_DATE']);
 export const pricingMode = z.enum(['COMMON', 'SPLIT']);
 export const discountType = z.enum(['NONE', 'PERCENT', 'FLAT']);
 export const invoiceStatus = z.enum(['DRAFT', 'PENDING', 'PARTIAL', 'PAID', 'CANCELLED']);
@@ -38,6 +38,32 @@ export const updateFeeStructureSchema = z.object({
   ),
 });
 export type UpdateFeeStructureDto = z.infer<typeof updateFeeStructureSchema>;
+
+// --- Fee type (school-wide plan: period + pricing mode) -------------------
+
+export const updateFeeTypeSchema = z
+  .object({
+    /** Free-text fee / plan name (school-wide). */
+    name: z.string().min(1).max(60),
+    period: feePeriod,
+    pricingMode,
+    /** 1 for one-time / due-date; TERM: 1–3; MONTHLY: 1–12. */
+    periodCount: z.number().int().min(1).max(12),
+    /** Required when period is DUE_DATE: ISO date the fee is due. */
+    dueDate: z.string().optional(),
+  })
+  .superRefine((v, ctx) => {
+    if ((v.period === 'ONE_TIME' || v.period === 'DUE_DATE') && v.periodCount !== 1) {
+      ctx.addIssue({ code: 'custom', path: ['periodCount'], message: 'This duration must have count = 1' });
+    }
+    if (v.period === 'TERM' && (v.periodCount < 1 || v.periodCount > 3)) {
+      ctx.addIssue({ code: 'custom', path: ['periodCount'], message: 'Term count must be 1, 2 or 3' });
+    }
+    if (v.period === 'DUE_DATE' && !v.dueDate) {
+      ctx.addIssue({ code: 'custom', path: ['dueDate'], message: 'A due date is required' });
+    }
+  });
+export type UpdateFeeTypeDto = z.infer<typeof updateFeeTypeSchema>;
 
 // --- Invoice batch (the class-billing wizard) -----------------------------
 

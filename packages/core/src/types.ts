@@ -3,7 +3,7 @@
  * @mentivax/db but are declared here so the engine stays framework/DB-agnostic.
  */
 
-export type FeePeriod = 'ONE_TIME' | 'TERM' | 'MONTHLY';
+export type FeePeriod = 'ONE_TIME' | 'TERM' | 'MONTHLY' | 'DUE_DATE';
 export type PricingMode = 'COMMON' | 'SPLIT';
 export type DiscountType = 'NONE' | 'PERCENT' | 'FLAT';
 export type InvoiceStatus = 'DRAFT' | 'PENDING' | 'PARTIAL' | 'PAID' | 'CANCELLED';

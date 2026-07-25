@@ -158,6 +158,7 @@ enum FeePeriod {
   ONE_TIME
   TERM
   MONTHLY
+  DUE_DATE
 }
 
 /// How a fee is priced across new vs old students.
@@ -180,6 +181,8 @@ model FeeType {
   pricingMode    PricingMode  @default(COMMON)
   /// Number of periods (2 terms, 11/12 monthly instalments, 1 one-time).
   periodCount    Int          @default(1)
+  /// For DUE_DATE fees: the single calendar date the whole fee is due.
+  dueDate        DateTime?
   /// If true, only applies to students who opted in (e.g. transport/van).
   optIn          Boolean      @default(false)
   /// Display order in the UI.

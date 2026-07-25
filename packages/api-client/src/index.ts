@@ -11,6 +11,7 @@ import type {
   EnableModuleDto,
   PreviewBatchDto,
   UpdateFeeStructureDto,
+  UpdateFeeTypeDto,
 } from '@mentivax/core';
 import type {
   AcademicYear,
@@ -110,6 +111,8 @@ export function createClient(opts: ClientOptions) {
     },
     feeTypes: {
       list: () => request<FeeType[]>('GET', '/fee-types'),
+      update: (id: string, dto: UpdateFeeTypeDto) =>
+        request<FeeType>('PATCH', `/fee-types/${id}`, dto),
     },
     feeStructure: {
       get: (classId: string) =>

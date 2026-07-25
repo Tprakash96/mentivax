@@ -597,6 +597,33 @@ a {
   border-color: var(--green);
   box-shadow: 0 0 0 3px var(--green-soft);
 }
+/* plain checkbox + label row (used in the Add student modal) */
+.mb label.chk {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 9px;
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  font-size: 13.5px;
+  font-weight: 550;
+  color: var(--ink);
+  cursor: pointer;
+  user-select: none;
+}
+.mb label.chk input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+.mb label.chk:has(input:checked) {
+  border-color: var(--green-line);
+  background: var(--green-soft);
+  color: var(--green-ink);
+}
 
 /* fee lines */
 .feelines {
@@ -972,6 +999,91 @@ table.rvw {
   border-color: var(--green);
   box-shadow: 0 0 0 3px var(--green-soft);
 }
+/* editable Period / Pricing controls */
+.fs-plan {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.fs-sel {
+  height: 32px;
+  padding: 0 26px 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 550;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2398a29e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+.fs-sel:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green-soft);
+}
+.fs-x {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.fs-count {
+  width: 62px;
+}
+.fs-fee {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.fs-tbl input.fs-name {
+  width: 160px;
+  height: 32px;
+  text-align: left;
+  font-family: var(--ui);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+}
+.fs-tbl input.fs-name:hover {
+  border-color: var(--line-2);
+  background: var(--card);
+}
+.fs-tbl input.fs-name:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green-soft);
+  background: var(--card);
+}
+.fs-optin {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  background: var(--paper);
+  border: 1px solid var(--line-2);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+.fs-date {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-family: var(--ui);
+}
+.fs-date:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green-soft);
+}
 
 /* ===== success ===== */
 .success {
@@ -1258,6 +1370,81 @@ h4.section {
   font-weight: 700;
 }
 
+/* ===== Ask Reports — hero ask bar ===== */
+.ask-row {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  margin: 4px 0 20px;
+}
+.ask-bar {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  height: 58px;
+  padding: 0 20px;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  box-shadow:
+    0 1px 2px rgba(16, 24, 20, 0.04),
+    0 10px 30px -16px rgba(14, 124, 91, 0.25);
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.ask-bar:focus-within {
+  border-color: var(--green);
+  box-shadow:
+    0 0 0 4px var(--green-soft),
+    0 14px 34px -14px rgba(14, 124, 91, 0.4);
+}
+.ask-bar .ico {
+  width: 21px;
+  height: 21px;
+  color: var(--green);
+  flex: none;
+}
+.ask-bar input {
+  border: none;
+  outline: none;
+  background: none;
+  flex: 1;
+  font-size: 15.5px;
+  color: var(--ink);
+}
+.ask-bar input::placeholder {
+  color: var(--ink-3);
+}
+.ask-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 58px;
+  padding: 0 26px;
+  border-radius: var(--r-lg);
+  background: var(--green);
+  color: #fff;
+  font-size: 14.5px;
+  font-weight: 650;
+  letter-spacing: 0.1px;
+  box-shadow: 0 8px 20px -10px rgba(14, 124, 91, 0.55);
+  transition:
+    background 0.16s ease,
+    transform 0.06s ease;
+}
+.ask-btn:hover {
+  background: var(--green-ink);
+}
+.ask-btn:active {
+  transform: translateY(1px);
+}
+.ask-btn .ico {
+  width: 17px;
+  height: 17px;
+}
+
 @media (max-width: 900px) {
   .paths {
     grid-template-columns: 1fr;
@@ -1270,5 +1457,11 @@ h4.section {
   }
   .footbar {
     flex-wrap: wrap;
+  }
+  .ask-row {
+    flex-direction: column;
+  }
+  .ask-btn {
+    justify-content: center;
   }
 }

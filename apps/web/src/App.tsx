@@ -9,15 +9,18 @@ import { BillingWizard } from './pages/BillingWizard';
 import { PaymentsPage } from './pages/PaymentsPage';
 import { FeeStructurePage } from './pages/FeeStructurePage';
 import { MarketplacePage } from './pages/MarketplacePage';
+import { AskReportsPage } from './pages/AskReportsPage';
 
-/** Nav items, each tied to the module that must be enabled to show it. */
-const NAV = [
+/** Nav items. `module` (optional) gates visibility; items without one always show. */
+const NAV: { to: string; label: string; icon: string; module?: string }[] = [
+  { to: '/ask-reports', label: 'Ask Reports', icon: 'sparkles' },
   { to: '/students', label: 'Students', icon: 'users', module: 'students' },
   { to: '/invoices', label: 'Invoices', icon: 'invoice', module: 'fees' },
   { to: '/payments', label: 'Payments', icon: 'card', module: 'fees' },
 ];
 
 const TITLES: Record<string, { title: string; sub: string }> = {
+  '/ask-reports': { title: 'Ask Reports', sub: 'Ask questions about your school in plain language' },
   '/students': { title: 'Students', sub: 'Roster · fee status per student' },
   '/invoices': { title: 'Invoices', sub: 'Issue and track fee invoices' },
   '/invoices/new': { title: 'New class billing', sub: 'Bill a whole class in one pass' },
@@ -57,7 +60,7 @@ export function App() {
   const { pathname } = useLocation();
   const meta = TITLES[pathname] ?? TITLES[`/${pathname.split('/')[1]}`] ?? { title: 'Mentivax', sub: '' };
 
-  const visibleNav = NAV.filter((n) => hasModule(n.module));
+  const visibleNav = NAV.filter((n) => !n.module || hasModule(n.module));
 
   return (
     <div className="app">
@@ -110,6 +113,7 @@ export function App() {
           <div className="wrap">
             <Routes>
               <Route path="/" element={<Navigate to="/students" replace />} />
+              <Route path="/ask-reports" element={<AskReportsPage />} />
               <Route path="/students" element={<StudentsPage />} />
               <Route path="/invoices" element={<ModuleGate module="fees"><InvoicesPage /></ModuleGate>} />
               <Route path="/invoices/new" element={<ModuleGate module="fees"><BillingWizard /></ModuleGate>} />
