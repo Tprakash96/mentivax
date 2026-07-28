@@ -4,7 +4,16 @@
  * agree.
  */
 import { clamp, splitEven } from './money';
-import type { DiscountType, FeePeriod, FeeStructureInput } from './types';
+import type {
+  DiscountType,
+  FeePeriod,
+  FeeStructureInput,
+  TransportFareInput,
+  TransportShift,
+} from './types';
+
+/** Stable line key for the transport fee on an invoice. */
+export const TRANSPORT_FEE_KEY = 'transport';
 
 /**
  * The amount (paise) a student owes for a fee, honouring the pricing mode:
@@ -80,15 +89,14 @@ export interface DraftLine {
 
 export interface StudentBillingInput {
   isNewAdmission: boolean;
-  hasTransport: boolean;
   /** Optional flat discount (paise) applied at the invoice level. */
   presetDiscount?: number;
   discountReason?: string;
 }
 
 /**
- * Build the fee lines for one student from a set of fee structures. Opt-in fees
- * (van/transport) are skipped for students without transport.
+ * Build the fee lines for one student from a set of fee structures. Every fee
+ * mapped to the student's class applies to every student.
  */
 export function buildStudentLines(
   fees: FeeStructureInput[],
@@ -96,7 +104,6 @@ export function buildStudentLines(
 ): DraftLine[] {
   const lines: DraftLine[] = [];
   for (const fee of fees) {
-    if (fee.optIn && !student.hasTransport) continue;
     const gross = resolveFeeAmount(fee, student.isNewAdmission);
     if (gross <= 0) continue;
     lines.push({
@@ -110,6 +117,58 @@ export function buildStudentLines(
       net: gross,
       periods: periodBreakdown(fee, gross),
     });
+  }
+  return lines;
+}
+
+/**
+ * The transport fare a student owes for a stop + shift (paise). Morning- or
+ * evening-only (one-way) is charged the lower fare; both-way the full fare.
+ */
+export function resolveTransportFare(fare: TransportFareInput, shift: TransportShift): number {
+  return shift === 'BOTH' ? fare.bothWayFare : fare.oneWayFare;
+}
+
+/** A billable transport line for a student's stop + shift (or null if free). */
+export function buildTransportLine(
+  fare: TransportFareInput,
+  shift: TransportShift,
+): DraftLine | null {
+  const gross = resolveTransportFare(fare, shift);
+  if (gross <= 0) return null;
+  const shiftLabel = shift === 'BOTH' ? 'Both ways' : shift === 'MORNING' ? 'Morning' : 'Evening';
+  return {
+    key: TRANSPORT_FEE_KEY,
+    name: `Transport — ${fare.routeName} · ${fare.stopName} (${shiftLabel})`,
+    period: 'MONTHLY',
+    gross,
+    discountType: 'NONE',
+    discountValue: 0,
+    discount: 0,
+    net: gross,
+    periods: [gross],
+  };
+}
+
+/** Optional transport assignment used when building a full invoice. */
+export interface TransportBillingInput {
+  fare: TransportFareInput;
+  shift: TransportShift;
+}
+
+/**
+ * Build every fee line for one student's invoice: academic fees from their
+ * standard, plus a transport line when they're assigned a stop.
+ */
+export function buildInvoiceLines(
+  fees: FeeStructureInput[],
+  student: StudentBillingInput,
+  transport?: TransportBillingInput,
+): DraftLine[] {
+  const lines = buildStudentLines(fees, student);
+  if (transport) {
+    const t = buildTransportLine(transport.fare, transport.shift);
+    if (t) lines.push(t);
   }
   return lines;
 }

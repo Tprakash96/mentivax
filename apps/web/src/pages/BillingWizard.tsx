@@ -370,10 +370,7 @@ export function BillingWizard() {
                 </div>
                 <div className="fn">
                   <b>{f.name}</b>
-                  <span>
-                    {f.description}
-                    {f.optIn ? ' · van students only' : ''}
-                  </span>
+                  <span>{f.description}</span>
                 </div>
                 <div className="amt">
                   <span className="lab">Pricing</span>
@@ -395,8 +392,8 @@ export function BillingWizard() {
         <div className="note">
           <Icon name="info" size={16} />
           <span>
-            Opt-in fees (like <b>Van Fee</b>) only apply to students with transport — they fill in for
-            van students and stay blank for the rest.
+            Every fee mapped to this class applies to all its students. <b>Split</b> fees price new
+            vs. continuing students differently; <b>one-price</b> fees charge everyone the same.
           </span>
         </div>
       </div>

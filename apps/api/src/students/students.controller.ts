@@ -1,5 +1,10 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { createStudentSchema, type CreateStudentDto } from '@mentivax/core';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  createStudentSchema,
+  updateStudentTransportSchema,
+  type CreateStudentDto,
+  type UpdateStudentTransportDto,
+} from '@mentivax/core';
 import { ZodBody } from '../common/zod-body.pipe';
 import { Tenant } from '../tenant/tenant.decorator';
 import type { TenantContext } from '../tenant/tenant.types';
@@ -27,5 +32,15 @@ export class StudentsController {
   @Post()
   create(@Tenant() t: TenantContext, @Body(new ZodBody(createStudentSchema)) dto: CreateStudentDto) {
     return this.service.create(t, dto);
+  }
+
+  /** Assign or clear a student's transport stop + shift. */
+  @Patch(':id/transport')
+  assignTransport(
+    @Tenant() t: TenantContext,
+    @Param('id') id: string,
+    @Body(new ZodBody(updateStudentTransportSchema)) dto: UpdateStudentTransportDto,
+  ) {
+    return this.service.assignTransport(t, id, dto);
   }
 }

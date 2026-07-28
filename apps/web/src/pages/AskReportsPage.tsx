@@ -41,7 +41,7 @@ export function AskReportsPage() {
         <div className="sec" style={{ marginTop: 0 }}>Try asking</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
           {EXAMPLES.map((ex) => (
-            <button key={ex} className="btn" onClick={() => setQ(ex)}>
+            <button key={ex} className="btn ask-ex" onClick={() => setQ(ex)}>
               {ex}
             </button>
           ))}

@@ -8,6 +8,9 @@ export type PricingMode = 'COMMON' | 'SPLIT';
 export type DiscountType = 'NONE' | 'PERCENT' | 'FLAT';
 export type InvoiceStatus = 'DRAFT' | 'PENDING' | 'PARTIAL' | 'PAID' | 'CANCELLED';
 export type PaymentMode = 'CASH' | 'UPI' | 'BANK_TRANSFER' | 'CHEQUE' | 'CARD';
+export type VehicleType = 'BUS' | 'VAN';
+/** Both = morning + evening (full fare); Morning/Evening = one-way (lower fare). */
+export type TransportShift = 'BOTH' | 'MORNING' | 'EVENING';
 
 /** The pricing definition for one fee type applied to one class. */
 export interface FeeStructureInput {
@@ -16,9 +19,18 @@ export interface FeeStructureInput {
   period: FeePeriod;
   pricingMode: PricingMode;
   periodCount: number;
-  optIn: boolean;
   /** paise */
   flatAmount: number;
   newAmount: number;
   oldAmount: number;
+}
+
+/** A transport stop's fares (paise). One-way is charged for morning/evening only. */
+export interface TransportFareInput {
+  stopId: string;
+  stopName: string;
+  routeName: string;
+  /** paise */
+  bothWayFare: number;
+  oneWayFare: number;
 }

@@ -43,6 +43,8 @@ model Organization {
   invoices      Invoice[]
   payments      Payment[]
   modules       OrganizationModule[]
+  transportRoutes TransportRoute[]
+  transportStops  TransportStop[]
 }
 
 // ---------------------------------------------------------------------------
@@ -127,6 +129,7 @@ model AcademicYear {
   students      Student[]
   invoiceBatches InvoiceBatch[]
   invoices      Invoice[]
+  transportRoutes TransportRoute[]
 
   @@unique([organizationId, label])
   @@index([organizationId])
@@ -183,8 +186,6 @@ model FeeType {
   periodCount    Int          @default(1)
   /// For DUE_DATE fees: the single calendar date the whole fee is due.
   dueDate        DateTime?
-  /// If true, only applies to students who opted in (e.g. transport/van).
-  optIn          Boolean      @default(false)
   /// Display order in the UI.
   rank           Int          @default(0)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -227,22 +228,83 @@ model Student {
   name           String
   /// New admission this year vs continuing student.
   isNewAdmission Boolean      @default(false)
-  /// Opted into transport (drives the optIn Van Fee).
-  hasTransport   Boolean      @default(false)
   parentName     String?
   phone          String?
   email          String?
+  /// Transport assignment (optional). A student with a stop is billed transport.
+  transportStopId String?
+  transportShift  TransportShift?
+  /// Fee adjustments (persistent, honoured on every invoice generation).
+  /// Exempt students are skipped entirely; discount applies to the whole invoice.
+  feeExempt      Boolean      @default(false)
+  discountType   DiscountType @default(NONE)
+  /// PERCENT: basis points (1000 = 10%); FLAT: paise.
+  discountValue  Int          @default(0)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
   schoolClass    SchoolClass  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  transportStop  TransportStop? @relation(fields: [transportStopId], references: [id], onDelete: SetNull)
 
   invoices Invoice[]
   payments Payment[]
 
   @@index([organizationId, academicYearId, classId])
   @@index([organizationId, name])
+  @@index([transportStopId])
+}
+
+// ---------------------------------------------------------------------------
+// Transport (per-stop fares; one-way costs less than both-way)
+// ---------------------------------------------------------------------------
+
+enum VehicleType {
+  BUS
+  VAN
+}
+
+enum TransportShift {
+  BOTH
+  MORNING
+  EVENING
+}
+
+/// A transport route served by one vehicle, with a set of pickup stops.
+model TransportRoute {
+  id             String       @id @default(cuid())
+  organizationId String
+  academicYearId String
+  name           String
+  /// Bus / van registration number, e.g. "TN-01-AB-1234".
+  vehicleNumber  String
+  vehicleType    VehicleType  @default(BUS)
+  rank           Int          @default(0)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+
+  stops TransportStop[]
+
+  @@index([organizationId, academicYearId])
+}
+
+/// A pickup stop on a route. Fares are in paise; one-way (morning- or
+/// evening-only) is cheaper than both-way.
+model TransportStop {
+  id             String         @id @default(cuid())
+  organizationId String
+  routeId        String
+  name           String
+  bothWayFare    Int            @default(0)
+  oneWayFare     Int            @default(0)
+  rank           Int            @default(0)
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  route          TransportRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  students Student[]
+
+  @@index([routeId])
+  @@index([organizationId])
 }
 
 // ---------------------------------------------------------------------------
@@ -298,6 +360,8 @@ model Invoice {
   discountAmount Int           @default(0)
   netAmount      Int           @default(0)
   paidAmount     Int           @default(0)
+  /// Optional free-text reason for an invoice-level discount.
+  discountReason String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -358,6 +422,8 @@ model Payment {
   amount         Int
   mode           PaymentMode  @default(CASH)
   description    String?
+  /// Inactive (voided) payments keep their record but their allocations are reversed.
+  isActive       Boolean      @default(true)
   createdAt      DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   student        Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)

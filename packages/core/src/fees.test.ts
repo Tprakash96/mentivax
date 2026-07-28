@@ -4,18 +4,20 @@ import {
   resolveFeeAmount,
   computeDiscount,
   buildStudentLines,
+  buildInvoiceLines,
+  resolveTransportFare,
   invoiceTotals,
   deriveStatus,
 } from './fees';
-import type { FeeStructureInput } from './types';
+import type { FeeStructureInput, TransportFareInput } from './types';
 
 const yearFee: FeeStructureInput = {
   key: 'year', name: 'School Fee', period: 'TERM', pricingMode: 'SPLIT',
-  periodCount: 2, optIn: false, flatAmount: 6000000, newAmount: 6000000, oldAmount: 5400000,
+  periodCount: 2, flatAmount: 6000000, newAmount: 6000000, oldAmount: 5400000,
 };
 const vanFee: FeeStructureInput = {
   key: 'van', name: 'Van Fee', period: 'MONTHLY', pricingMode: 'COMMON',
-  periodCount: 11, optIn: true, flatAmount: 1100000, newAmount: 1100000, oldAmount: 1100000,
+  periodCount: 11, flatAmount: 1100000, newAmount: 1100000, oldAmount: 1100000,
 };
 
 describe('money', () => {
@@ -50,15 +52,40 @@ describe('discounts', () => {
 });
 
 describe('student billing', () => {
-  it('skips opt-in fees for students without transport', () => {
-    const noVan = buildStudentLines([yearFee, vanFee], { isNewAdmission: false, hasTransport: false });
-    expect(noVan.map((l) => l.key)).toEqual(['year']);
-    const withVan = buildStudentLines([yearFee, vanFee], { isNewAdmission: false, hasTransport: true });
-    expect(withVan.map((l) => l.key)).toEqual(['year', 'van']);
+  it('bills every mapped fee for the student', () => {
+    const lines = buildStudentLines([yearFee, vanFee], { isNewAdmission: false });
+    expect(lines.map((l) => l.key)).toEqual(['year', 'van']);
+  });
+  it('resolves old-admission pricing for SPLIT fees', () => {
+    const newAdm = buildStudentLines([yearFee], { isNewAdmission: true });
+    expect(newAdm[0]?.gross).toBe(6000000);
   });
   it('totals lines correctly', () => {
-    const lines = buildStudentLines([yearFee], { isNewAdmission: false, hasTransport: false });
+    const lines = buildStudentLines([yearFee], { isNewAdmission: false });
     expect(invoiceTotals(lines)).toEqual({ gross: 5400000, discount: 0, net: 5400000 });
+  });
+});
+
+const stopFare: TransportFareInput = {
+  stopId: 'stop1', stopName: 'Gandhi Nagar', routeName: 'North',
+  bothWayFare: 1200000, oneWayFare: 700000,
+};
+
+describe('transport', () => {
+  it('charges both-way fare for BOTH shift, one-way otherwise', () => {
+    expect(resolveTransportFare(stopFare, 'BOTH')).toBe(1200000);
+    expect(resolveTransportFare(stopFare, 'MORNING')).toBe(700000);
+    expect(resolveTransportFare(stopFare, 'EVENING')).toBe(700000);
+  });
+  it('adds a transport line to the invoice when assigned a stop', () => {
+    const lines = buildInvoiceLines([yearFee], { isNewAdmission: false }, { fare: stopFare, shift: 'MORNING' });
+    expect(lines.map((l) => l.key)).toEqual(['year', 'transport']);
+    expect(lines[1]?.gross).toBe(700000);
+    expect(invoiceTotals(lines).net).toBe(5400000 + 700000);
+  });
+  it('omits transport when no stop is assigned', () => {
+    const lines = buildInvoiceLines([yearFee], { isNewAdmission: false });
+    expect(lines.map((l) => l.key)).toEqual(['year']);
   });
 });
 
