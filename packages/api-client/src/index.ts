@@ -6,25 +6,46 @@
  */
 import type {
   CreateBatchDto,
+  CreateClassDto,
+  CreateFeeTypeDto,
+  CreateFinancialYearDto,
+  CreateInvoiceDto,
   CreatePaymentDto,
+  CreateRouteDto,
+  CreateStopDto,
   CreateStudentDto,
   EnableModuleDto,
+  FeeScope,
+  GenerateInvoicesDto,
   PreviewBatchDto,
+  SaveStopFaresDto,
+  UpdateClassDto,
   UpdateFeeStructureDto,
   UpdateFeeTypeDto,
+  UpdateFinancialYearDto,
+  UpdateInvoiceDto,
+  UpdatePaymentDto,
+  UpdateRouteDto,
+  UpdateStopDto,
+  UpdateStudentTransportDto,
 } from '@mentivax/core';
 import type {
   AcademicYear,
   BatchPreview,
   FeeStructureRow,
   FeeType,
+  FinancialYear,
+  GeneratePreviewRow,
   Invoice,
+  InvoiceSinglePreview,
   ModuleView,
   Organization,
   Payment,
+  PaymentBreakdown,
   PaymentsSummary,
   SchoolClass,
   Student,
+  TransportRoute,
 } from './types';
 
 export * from './types';
@@ -108,11 +129,17 @@ export function createClient(opts: ClientOptions) {
     },
     classes: {
       list: () => request<SchoolClass[]>('GET', '/classes'),
+      create: (dto: CreateClassDto) => request<SchoolClass>('POST', '/classes', dto),
+      update: (id: string, dto: UpdateClassDto) =>
+        request<SchoolClass>('PATCH', `/classes/${id}`, dto),
+      remove: (id: string) => request<void>('DELETE', `/classes/${id}`),
     },
     feeTypes: {
       list: () => request<FeeType[]>('GET', '/fee-types'),
+      create: (dto: CreateFeeTypeDto) => request<FeeType>('POST', '/fee-types', dto),
       update: (id: string, dto: UpdateFeeTypeDto) =>
         request<FeeType>('PATCH', `/fee-types/${id}`, dto),
+      remove: (id: string) => request<void>('DELETE', `/fee-types/${id}`),
     },
     feeStructure: {
       get: (classId: string) =>
@@ -125,6 +152,35 @@ export function createClient(opts: ClientOptions) {
         request<Student[]>('GET', `/students${q(params)}`),
       get: (id: string) => request<Student>('GET', `/students/${id}`),
       create: (dto: CreateStudentDto) => request<Student>('POST', '/students', dto),
+      /** Assign or clear a student's transport stop + shift. */
+      assignTransport: (id: string, dto: UpdateStudentTransportDto) =>
+        request<Student>('PATCH', `/students/${id}/transport`, dto),
+    },
+    transport: {
+      routes: {
+        list: () => request<TransportRoute[]>('GET', '/transport/routes'),
+        create: (dto: CreateRouteDto) => request<TransportRoute[]>('POST', '/transport/routes', dto),
+        update: (id: string, dto: UpdateRouteDto) =>
+          request<TransportRoute[]>('PATCH', `/transport/routes/${id}`, dto),
+        remove: (id: string) => request<TransportRoute[]>('DELETE', `/transport/routes/${id}`),
+      },
+      stops: {
+        create: (dto: CreateStopDto) => request<TransportRoute[]>('POST', '/transport/stops', dto),
+        update: (id: string, dto: UpdateStopDto) =>
+          request<TransportRoute[]>('PATCH', `/transport/stops/${id}`, dto),
+        remove: (id: string) => request<TransportRoute[]>('DELETE', `/transport/stops/${id}`),
+        saveFares: (dto: SaveStopFaresDto) =>
+          request<TransportRoute[]>('PUT', '/transport/stops/fares', dto),
+      },
+    },
+    financialYears: {
+      list: () => request<FinancialYear[]>('GET', '/financial-years'),
+      create: (dto: CreateFinancialYearDto) =>
+        request<FinancialYear>('POST', '/financial-years', dto),
+      update: (id: string, dto: UpdateFinancialYearDto) =>
+        request<FinancialYear>('PATCH', `/financial-years/${id}`, dto),
+      activate: (id: string) =>
+        request<FinancialYear[]>('POST', `/financial-years/${id}/activate`, {}),
     },
     invoices: {
       list: (params: { status?: string; search?: string } = {}) =>
@@ -134,12 +190,26 @@ export function createClient(opts: ClientOptions) {
         request<BatchPreview>('POST', '/invoices/batch/preview', dto),
       createBatch: (dto: CreateBatchDto) =>
         request<{ created: number; invoiceIds: string[] }>('POST', '/invoices/batch', dto),
+      createOne: (dto: CreateInvoiceDto) => request<{ id: string }>('POST', '/invoices/single', dto),
+      /** Period-wise split of the invoice a student would get under a fee scope. */
+      previewSingle: (studentId: string, feeScope: FeeScope) =>
+        request<InvoiceSinglePreview>('GET', `/invoices/single/preview${q({ studentId, feeScope })}`),
+      update: (id: string, dto: UpdateInvoiceDto) => request<Invoice>('PATCH', `/invoices/${id}`, dto),
+      generatePreview: () =>
+        request<GeneratePreviewRow[]>('GET', '/invoices/generate/preview'),
+      generate: (dto: GenerateInvoicesDto) =>
+        request<{ created: number; skipped: number; exempted: number }>('POST', '/invoices/generate', dto),
     },
     payments: {
       list: (params: { search?: string } = {}) =>
         request<Payment[]>('GET', `/payments${q(params)}`),
       summary: () => request<PaymentsSummary>('GET', '/payments/summary'),
+      breakdown: (id: string) => request<PaymentBreakdown>('GET', `/payments/${id}/breakdown`),
       create: (dto: CreatePaymentDto) => request<Payment>('POST', '/payments', dto),
+      update: (id: string, dto: UpdatePaymentDto) =>
+        request<Payment>('PATCH', `/payments/${id}`, dto),
+      /** Void a payment: mark inactive and reverse its effect on invoices. */
+      deactivate: (id: string) => request<Payment>('POST', `/payments/${id}/deactivate`, {}),
     },
   };
 }

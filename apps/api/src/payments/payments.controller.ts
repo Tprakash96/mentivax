@@ -1,5 +1,10 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
-import { createPaymentSchema, type CreatePaymentDto } from '@mentivax/core';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  createPaymentSchema,
+  updatePaymentSchema,
+  type CreatePaymentDto,
+  type UpdatePaymentDto,
+} from '@mentivax/core';
 import { ZodBody } from '../common/zod-body.pipe';
 import { Tenant } from '../tenant/tenant.decorator';
 import type { TenantContext } from '../tenant/tenant.types';
@@ -23,8 +28,28 @@ export class PaymentsController {
     return this.service.summary(t);
   }
 
+  @Get(':id/breakdown')
+  breakdown(@Tenant() t: TenantContext, @Param('id') id: string) {
+    return this.service.breakdown(t, id);
+  }
+
   @Post()
   create(@Tenant() t: TenantContext, @Body(new ZodBody(createPaymentSchema)) dto: CreatePaymentDto) {
     return this.service.create(t, dto);
+  }
+
+  @Patch(':id')
+  update(
+    @Tenant() t: TenantContext,
+    @Param('id') id: string,
+    @Body(new ZodBody(updatePaymentSchema)) dto: UpdatePaymentDto,
+  ) {
+    return this.service.update(t, id, dto);
+  }
+
+  /** Void a payment: mark inactive and reverse its effect on invoices. */
+  @Post(':id/deactivate')
+  deactivate(@Tenant() t: TenantContext, @Param('id') id: string) {
+    return this.service.deactivate(t, id);
   }
 }

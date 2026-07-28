@@ -10,6 +10,7 @@ import {
   type DiscountType,
   type FeeStructureInput,
   type PreviewBatchDto,
+  type UpdateInvoiceDto,
 } from '@mentivax/core';
 import type { BatchPreview, BatchPreviewRow, Invoice } from '@mentivax/api-client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -46,7 +47,6 @@ export class InvoicesService {
     const rows: BatchPreviewRow[] = students.map((s) => {
       const lines = buildStudentLines(fees, {
         isNewAdmission: s.isNewAdmission,
-        hasTransport: s.hasTransport,
       });
       const amounts: Record<string, number | null> = {};
       for (const fee of fees) {
@@ -58,7 +58,6 @@ export class InvoicesService {
         studentId: s.id,
         name: s.name,
         isNewAdmission: s.isNewAdmission,
-        hasTransport: s.hasTransport,
         amounts,
         gross: totals.gross,
         discount: totals.discount,
@@ -118,7 +117,6 @@ export class InvoicesService {
         const adj = dto.adjustments?.[s.id];
         const baseLines = buildStudentLines(fees, {
           isNewAdmission: s.isNewAdmission,
-          hasTransport: s.hasTransport,
         });
         if (baseLines.length === 0) continue;
 
@@ -191,6 +189,39 @@ export class InvoicesService {
       include: { student: { include: { schoolClass: { select: { name: true } } } } },
     });
     return invoices.map((i) => this.toDto(i));
+  }
+
+  /** Edit an invoice's label, dates, and invoice-level discount (net + status re-derived). */
+  async update(t: TenantContext, id: string, dto: UpdateInvoiceDto): Promise<Invoice> {
+    const inv = await this.prisma.invoice.findFirst({
+      where: { id, organizationId: t.organizationId },
+    });
+    if (!inv) throw new NotFoundException('Invoice not found');
+
+    // Recompute the invoice-level discount only when a discount field is sent.
+    let discountAmount = inv.discountAmount;
+    let netAmount = inv.netAmount;
+    if (dto.discountType !== undefined || dto.discountValue !== undefined) {
+      discountAmount = computeDiscount(inv.grossAmount, dto.discountType ?? 'NONE', dto.discountValue ?? 0);
+      netAmount = Math.max(0, inv.grossAmount - discountAmount);
+    }
+
+    const updated = await this.prisma.invoice.update({
+      where: { id: inv.id },
+      data: {
+        name: dto.name?.trim() || undefined,
+        issueDate: dto.issueDate ? new Date(dto.issueDate) : undefined,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+        discountAmount,
+        netAmount,
+        status: deriveStatus(netAmount, inv.paidAmount),
+      },
+      include: {
+        student: { include: { schoolClass: { select: { name: true } } } },
+        lines: true,
+      },
+    });
+    return this.toDto(updated);
   }
 
   async get(t: TenantContext, id: string): Promise<Invoice> {

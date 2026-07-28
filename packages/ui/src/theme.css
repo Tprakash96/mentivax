@@ -1,29 +1,82 @@
-/* Mentivax theme — CSS custom properties shared by web (and Electron). */
+/* Mentivax theme — the official brand design system (mentivax.com), theme-aware.
+ * The accent tokens keep their historical `--green*` names but now hold the
+ * brand BLUE (#2563EB), so every primary button / active state is on-brand.
+ * `--success*` carries the actual green (paid status, positive amounts). */
 :root {
-  --paper: #f7f8f7;
+  color-scheme: light;
+  --paper: #eef3fb;
   --card: #ffffff;
-  --ink: #171b1a;
-  --ink-2: #5b6663;
-  --ink-3: #98a29e;
-  --line: #e6eae8;
-  --line-2: #d5dcd9;
-  --green: #0e7c5b;
-  --green-ink: #0a5c44;
-  --green-soft: #e8f4ef;
-  --green-line: #bee0d2;
-  --amber: #b0700a;
-  --amber-soft: #fbf1dd;
-  --amber-line: #ebd9ae;
-  --red: #c0392b;
-  --red-soft: #fbeae7;
+  --hover: #f4f7fd;
+  --ink: #10192b;
+  --ink-2: #4a5568;
+  --ink-3: #8a93a6;
+  --line: #dce4f0;
+  --line-2: #cdd8ec;
+
+  /* Primary accent (brand blue) */
+  --green: #2563eb;
+  --green-ink: #1d4ed8;
+  --green-soft: #eaf0fe;
+  --green-line: #c7d9fb;
+
+  /* Success (brand green) */
+  --success: #1e9e6a;
+  --success-ink: #157552;
+  --success-soft: #e3f5ed;
+
+  --amber: #b26b00;
+  --amber-soft: #fcf0dc;
+  --amber-line: #f3dcb0;
+  --red: #d9483b;
+  --red-soft: #fceae8;
   --blue: #2563eb;
   --blue-soft: #eaf0fe;
   --violet: #6d45c9;
   --violet-soft: #efe9fb;
-  --r: 12px;
+
+  --r: 10px;
   --r-lg: 16px;
-  --sh: 0 1px 2px rgba(23, 27, 26, 0.05), 0 4px 14px rgba(23, 27, 26, 0.04);
-  --sh-lg: 0 10px 34px rgba(23, 27, 26, 0.12);
-  --ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, system-ui, sans-serif;
-  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --sh: 0 1px 2px rgba(16, 25, 43, 0.05), 0 4px 14px rgba(16, 25, 43, 0.05);
+  --sh-lg: 0 12px 34px rgba(16, 25, 43, 0.14);
+  --primary-glow: 0 2px 12px rgba(37, 99, 235, 0.3);
+
+  --ui: 'DM Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --display: 'Space Grotesk', 'DM Sans', system-ui, sans-serif;
+  --mono: 'DM Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+/* Dark navy — the landing-page surface palette (#0F1B34 / #17233F). */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --paper: #0f1b34;
+  --card: #17233f;
+  --hover: #1e2c4a;
+  --ink: #eef3fb;
+  --ink-2: #b9c3d9;
+  --ink-3: #8090ad;
+  --line: #26355a;
+  --line-2: #32446e;
+
+  --green: #3b82f6;
+  --green-ink: #93b4fb;
+  --green-soft: #1c2c4e;
+  --green-line: #2e4675;
+
+  --success: #34c58a;
+  --success-ink: #7fe0bc;
+  --success-soft: #16311f;
+
+  --amber: #f6b44d;
+  --amber-soft: #38290f;
+  --amber-line: #574012;
+  --red: #f1786b;
+  --red-soft: #3a1f1c;
+  --blue: #3b82f6;
+  --blue-soft: #1c2c4e;
+  --violet: #a98bec;
+  --violet-soft: #2a2246;
+
+  --sh: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.35);
+  --sh-lg: 0 16px 42px rgba(0, 0, 0, 0.5);
+  --primary-glow: 0 2px 14px rgba(59, 130, 246, 0.45);
 }

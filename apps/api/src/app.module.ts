@@ -9,6 +9,8 @@ import { StudentsModule } from './students/students.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ModulesModule } from './modules/modules.module';
+import { TransportModule } from './transport/transport.module';
+import { FinancialYearsModule } from './financial-years/financial-years.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { ModulesModule } from './modules/modules.module';
     StudentsModule,
     InvoicesModule,
     PaymentsModule,
+    TransportModule,
+    FinancialYearsModule,
   ],
   controllers: [HealthController],
 })

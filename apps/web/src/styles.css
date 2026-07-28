@@ -39,6 +39,14 @@ a {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
+h1,
+h2,
+h3,
+h4,
+.logo b {
+  font-family: var(--display);
+  letter-spacing: -0.01em;
+}
 .ico {
   width: 17px;
   height: 17px;
@@ -74,7 +82,7 @@ a {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #12a374, #0a5c44);
+  background: linear-gradient(135deg, #3b82f6, #1e3a8a);
   display: grid;
   place-items: center;
   color: #fff;
@@ -146,7 +154,7 @@ a {
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: #12a374;
+  background: #3b82f6;
   color: #fff;
   display: grid;
   place-items: center;
@@ -183,6 +191,22 @@ a {
   font-weight: 700;
   letter-spacing: -0.01em;
 }
+.themetog {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  border: 1px solid var(--line-2);
+  background: var(--card);
+  color: var(--ink-2);
+}
+.themetog:hover {
+  color: var(--green);
+  border-color: var(--green-line);
+  background: var(--green-soft);
+}
 .mtop .sub {
   font-size: 12px;
   color: var(--ink-3);
@@ -206,10 +230,13 @@ a {
   padding: 0 15px;
   border-radius: 9px;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
   border: 1px solid var(--line-2);
   background: var(--card);
   color: var(--ink-2);
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
 }
 .btn:hover {
   border-color: var(--ink-3);
@@ -219,9 +246,11 @@ a {
   background: var(--green);
   border-color: var(--green);
   color: #fff;
+  box-shadow: var(--primary-glow);
 }
 .btn.grn:hover {
   background: var(--green-ink);
+  border-color: var(--green-ink);
 }
 .btn.grn:disabled {
   background: var(--line-2);
@@ -245,6 +274,83 @@ a {
 .btn .ico {
   width: 15px;
   height: 15px;
+}
+/* Per-row action cluster: Edit + kebab menu (payments). */
+.rowacts {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.kebab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--line-2);
+  background: var(--card);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.kebab:hover {
+  border-color: var(--ink-3);
+  color: var(--ink);
+  background: var(--hover);
+}
+.rowmenu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+.rowmenu {
+  position: fixed;
+  z-index: 61;
+  min-width: 170px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+}
+.rowmenu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--ink);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.rowmenu button:hover {
+  background: var(--hover);
+}
+.rowmenu button .ico {
+  color: var(--ink-3);
+}
+.rowmenu button.danger,
+.rowmenu button.danger .ico {
+  color: var(--red);
+}
+.rowmenu button.danger:hover {
+  background: var(--red-soft);
+}
+/* Voided/inactive payment rows. */
+.pay-inactive td {
+  opacity: 0.55;
+}
+.inactive-tag {
+  margin-left: 8px;
 }
 .tag {
   display: inline-flex;
@@ -276,11 +382,11 @@ a {
   background: var(--ink-3);
 }
 .tag.paid {
-  background: var(--green-soft);
-  color: var(--green-ink);
+  background: var(--success-soft);
+  color: var(--success-ink);
 }
 .tag.paid i {
-  background: var(--green);
+  background: var(--success);
 }
 .tag.part {
   background: var(--amber-soft);
@@ -394,7 +500,7 @@ a {
   font-size: 10.8px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--ink);
   font-weight: 650;
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
@@ -405,7 +511,18 @@ a {
   white-space: nowrap;
 }
 .card-t tbody tr:hover td {
-  background: #fbfcfb;
+  background: var(--hover);
+}
+.card-t tbody tr.click {
+  cursor: pointer;
+}
+.inv-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--ink-2);
 }
 .card-t tr:last-child td {
   border-bottom: none;
@@ -461,8 +578,8 @@ a {
   overflow: hidden;
 }
 .path.primary {
-  background: linear-gradient(135deg, #0f3d2e, #0a5c44);
-  color: #eaf6f0;
+  background: linear-gradient(135deg, #14306e, #1e3a8a);
+  color: #e9f0ff;
 }
 .path.primary h3 {
   color: #fff;
@@ -480,7 +597,7 @@ a {
   margin-bottom: 16px;
 }
 .path.primary p {
-  color: #bfe3d3;
+  color: #c3d8ff;
 }
 .path .pill-time {
   display: inline-flex;
@@ -491,7 +608,7 @@ a {
   padding: 3px 10px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.15);
-  color: #dff3ea;
+  color: #e0ecff;
   margin-bottom: 12px;
 }
 
@@ -722,7 +839,7 @@ a {
   border-radius: 10px;
   padding: 11px 14px;
   font-size: 12.5px;
-  color: #14523f;
+  color: #1e3a8a;
   margin-top: 14px;
 }
 .note .ico {
@@ -762,7 +879,7 @@ a {
   font-weight: 700;
 }
 .footbar .s .v.grn {
-  color: var(--green-ink);
+  color: var(--success-ink);
 }
 .footbar .s .v.amb {
   color: var(--amber);
@@ -819,7 +936,7 @@ table.rvw {
   font-size: 11px;
 }
 .rvw tbody tr:hover td {
-  background: #fbfcfb;
+  background: var(--hover);
 }
 .rvw .sname {
   display: flex;
@@ -905,6 +1022,22 @@ table.rvw {
   padding: 17px 20px;
   box-shadow: var(--sh);
 }
+.paycard.clickable {
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+}
+.paycard.clickable:hover {
+  border-color: var(--green-line);
+  box-shadow: var(--sh-lg);
+}
+.paycard .viewhint {
+  color: var(--green);
+  font-weight: 600;
+}
 .paycard .h {
   display: flex;
   align-items: center;
@@ -938,7 +1071,7 @@ table.rvw {
   color: var(--blue);
 }
 .paycard.paid .big {
-  color: var(--green-ink);
+  color: var(--success-ink);
 }
 .paycard.due .big {
   color: var(--red);
@@ -984,9 +1117,20 @@ table.rvw {
   font-family: var(--mono);
   color: var(--ink-3);
 }
+/* Fixed layout so column widths follow the colgroup exactly (auto layout would
+   shrink the Old column to fit its "—" placeholders and clip the amount). */
+.fs-tbl {
+  table-layout: fixed;
+  width: 100%;
+}
+/* Every cell + control on one line, vertically centred. */
+.fs-tbl td,
+.fs-tbl th {
+  vertical-align: middle;
+}
 .fs-tbl input {
-  width: 110px;
-  height: 32px;
+  width: 100%;
+  height: 34px;
   text-align: right;
   border: 1px solid var(--line-2);
   border-radius: 8px;
@@ -999,14 +1143,26 @@ table.rvw {
   border-color: var(--green);
   box-shadow: 0 0 0 3px var(--green-soft);
 }
+.fs-tbl input:disabled {
+  background: var(--paper);
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
 /* editable Period / Pricing controls */
 .fs-plan {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+/* Duration select keeps a stable width; the date field takes the rest. */
+.fs-dur {
+  flex: 0 0 104px;
+  min-width: 0;
 }
 .fs-sel {
-  height: 32px;
+  height: 34px;
   padding: 0 26px 0 10px;
   border: 1px solid var(--line-2);
   border-radius: 8px;
@@ -1030,28 +1186,34 @@ table.rvw {
   font-size: 12px;
 }
 .fs-count {
-  width: 62px;
+  flex: 0 0 58px;
+  width: 58px;
 }
 .fs-fee {
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
+/* Fee name — the customizable free-text column. A proper bounded field so it
+   reads as editable and lines up with the selects / amount inputs. */
 .fs-tbl input.fs-name {
-  width: 160px;
-  height: 32px;
+  width: 100%;
+  height: 34px;
   text-align: left;
   font-family: var(--ui);
   font-size: 13px;
   font-weight: 600;
-  padding: 0 10px;
-  border: 1px solid transparent;
+  padding: 0 11px;
+  border: 1px solid var(--line-2);
   border-radius: 8px;
-  background: transparent;
+  background: var(--card);
+}
+.fs-tbl input.fs-name::placeholder {
+  font-weight: 500;
+  color: var(--ink-3);
 }
 .fs-tbl input.fs-name:hover {
-  border-color: var(--line-2);
-  background: var(--card);
+  border-color: var(--ink-3);
 }
 .fs-tbl input.fs-name:focus {
   outline: none;
@@ -1070,8 +1232,12 @@ table.rvw {
   border-radius: 6px;
 }
 .fs-date {
-  height: 32px;
+  flex: 0 0 140px;
+  width: auto;
+  min-width: 0;
+  height: 34px;
   padding: 0 8px;
+  text-align: left;
   border: 1px solid var(--line-2);
   border-radius: 8px;
   background: var(--card);
@@ -1083,6 +1249,766 @@ table.rvw {
   outline: none;
   border-color: var(--green);
   box-shadow: 0 0 0 3px var(--green-soft);
+}
+/* Section header (shared by Fee items / Fees per class panels) */
+.fs-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+/* Add row / add class button */
+.fs-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  justify-content: center;
+}
+.fs-add:hover {
+  border-color: var(--green);
+  color: var(--green-ink);
+  background: var(--green-soft);
+}
+/* Row delete button */
+.fs-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.fs-del:hover {
+  color: var(--red);
+  background: var(--red-soft);
+}
+/* Read-only duration chip in the amounts grid */
+.fs-chip {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--ink-2);
+  background: var(--paper);
+  border: 1px solid var(--line-2);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+/* Class rail rows with hover-revealed actions */
+.cli-wrap {
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+}
+.cli-wrap.on {
+  background: var(--green-soft);
+}
+.cli-wrap .cli {
+  flex: 1;
+}
+.cli-wrap.on .cli {
+  color: var(--green-ink);
+  font-weight: 650;
+}
+.cli-wrap:hover {
+  background: var(--paper);
+}
+.cli-wrap.on:hover {
+  background: var(--green-soft);
+}
+.cli-act {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 3px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.cli-wrap:hover .cli-act {
+  display: inline-flex;
+}
+.cli-act:hover {
+  color: var(--ink);
+  background: var(--card);
+}
+.fs-classinput {
+  width: calc(100% - 8px);
+  margin: 2px 4px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--green);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 550;
+  box-shadow: 0 0 0 3px var(--green-soft);
+  outline: none;
+}
+/* Section tabs (Academic / Transport) */
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.tab {
+  padding: 9px 18px;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab:hover {
+  color: var(--ink);
+}
+.tab.on {
+  color: var(--green-ink);
+  border-bottom-color: var(--green);
+}
+/* Pill sub-tabs (e.g. Transport → Van / Stops / Mapping / Fees) */
+.subtabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 16px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  flex-wrap: wrap;
+}
+.subtab {
+  padding: 7px 15px;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.12s, color 0.12s;
+}
+.subtab:hover {
+  color: var(--ink);
+}
+.subtab.on {
+  background: var(--card);
+  color: var(--green-ink);
+  box-shadow: var(--sh);
+}
+/* Transport fare input */
+.fs-fare {
+  width: 120px;
+  height: 34px;
+  padding: 0 10px;
+  text-align: right;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.fs-fare:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green-soft);
+}
+/* Table pagination footer */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 20px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  flex-wrap: wrap;
+}
+.pager-rpp {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.pager-rpp select {
+  height: 30px;
+  padding: 0 24px 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 12.5px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2398a29e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+}
+.pager-range {
+  font-family: var(--mono);
+  color: var(--ink-3);
+}
+.pager-btns {
+  display: inline-flex;
+  gap: 2px;
+}
+.pager-btns button {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  color: var(--ink-2);
+  font-size: 16px;
+  line-height: 1;
+}
+.pager-btns button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--green);
+}
+.pager-btns button:disabled {
+  color: var(--ink-3);
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Standards — compact row list */
+.std-list {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--sh);
+  overflow: hidden;
+  max-width: 560px;
+}
+.std-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.std-row:last-of-type {
+  border-bottom: none;
+}
+.std-row:hover {
+  background: var(--hover);
+}
+.std-row.click {
+  cursor: pointer;
+}
+.std-sec {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-3);
+  font-weight: 650;
+  margin-bottom: 8px;
+  font-family: var(--ui);
+}
+/* Plain student-name list inside a standard's detail modal. */
+.std-names {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: std-name;
+}
+.std-names li {
+  counter-increment: std-name;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 4px;
+  font-size: 14px;
+  font-weight: 550;
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+}
+.std-names li:last-child {
+  border-bottom: none;
+}
+.std-names li::before {
+  content: counter(std-name);
+  flex: 0 0 24px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+  text-align: right;
+}
+.std-rname {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.std-rcount {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--ink-3);
+  font-family: var(--mono);
+}
+.std-racts {
+  display: inline-flex;
+  gap: 2px;
+}
+.std-racts button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  color: var(--ink-3);
+}
+.std-racts button:hover {
+  background: var(--card);
+  color: var(--ink);
+}
+.std-racts button.del:hover {
+  color: var(--red);
+  background: var(--red-soft);
+}
+.std-rowinput {
+  flex: 1;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--green);
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: 0 0 0 3px var(--green-soft);
+  outline: none;
+}
+.std-addrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--green);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.std-addrow:hover {
+  background: var(--green-soft);
+}
+
+/* Expandable payment amount → period breakdown */
+.amt-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: inherit;
+  color: var(--success-ink);
+  font-weight: 650;
+  cursor: pointer;
+}
+.amt-toggle:hover {
+  color: var(--green);
+}
+.amt-toggle .ico {
+  color: var(--ink-3);
+  width: 13px;
+  height: 13px;
+}
+.brk-row td {
+  padding: 0 !important;
+  background: var(--hover);
+}
+.brk {
+  padding: 10px 16px 14px 44px;
+}
+.brk-tbl {
+  width: auto !important;
+  border-collapse: collapse;
+}
+.brk-tbl th,
+.brk-tbl td {
+  padding: 5px 28px 5px 0 !important;
+  border: none !important;
+  background: transparent !important;
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+.brk-tbl th {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-3);
+  font-weight: 650;
+}
+.brk-tbl .num {
+  text-align: right;
+  font-family: var(--mono);
+}
+/* Period breakdown rendered as a full-width card table (payment View modal). */
+.pay-view-brk .brk {
+  padding: 0;
+}
+.pay-view-brk .brk-tbl {
+  width: 100% !important;
+}
+.pay-view-brk .brk-tbl th,
+.pay-view-brk .brk-tbl td {
+  padding: 10px 14px !important;
+  border-bottom: 1px solid var(--line) !important;
+}
+.pay-view-brk .brk-tbl tbody tr:last-child td {
+  border-bottom: none !important;
+}
+.pay-view-brk .brk-tbl .num {
+  width: 1%;
+  white-space: nowrap;
+}
+.pay-view-brk .brk > .muted,
+.pay-view-brk .brk > .state {
+  display: block;
+  padding: 12px 14px;
+}
+/* Period-based payment allocation (Add-invoice modal), grouped per fee. */
+/* Add-invoice two-column layout: allocation on the left, form on the right. */
+.ai-split {
+  display: grid;
+  grid-template-columns: 1fr minmax(300px, 380px);
+  gap: 24px;
+  align-items: start;
+}
+.ai-left,
+.ai-right {
+  min-width: 0;
+}
+.ai-right {
+  order: 1;
+}
+.ai-left {
+  order: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-left: 1px solid var(--line);
+  padding-left: 24px;
+}
+.ai-empty {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 13.5px;
+  border: 1px dashed var(--line-2);
+  border-radius: 12px;
+}
+@media (max-width: 900px) {
+  .ai-split {
+    grid-template-columns: 1fr;
+  }
+  .ai-left {
+    order: 0;
+    border-left: none;
+    padding-left: 0;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 8px;
+  }
+  .ai-right {
+    order: 1;
+  }
+}
+
+.pba-scroll {
+  margin-top: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+/* Each fee's allocation table takes the full width of the right column. */
+.pba-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.pba-group {
+  min-width: 0;
+}
+.pba-title {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+  margin-bottom: 5px;
+}
+.pba-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  background: var(--green-soft);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+}
+.pba-note .ico {
+  color: var(--green);
+  flex: none;
+}
+
+/* Record-payment live allocation preview */
+.linkbtn {
+  float: right;
+  font-size: 11.5px;
+  color: var(--green);
+  font-weight: 600;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.linkbtn:hover {
+  text-decoration: underline;
+}
+.alloc {
+  margin-bottom: 4px;
+}
+.alloc-sums {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.alloc-sum {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 12px;
+  background: var(--paper);
+}
+.alloc-sum span {
+  display: block;
+  font-size: 10px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+.alloc-sum b {
+  font-size: 17px;
+  font-family: var(--display);
+}
+.alloc-sum.pay b {
+  color: var(--success-ink);
+}
+.alloc-sum.due b {
+  color: var(--red);
+}
+.alloc-card {
+  max-height: 236px;
+  overflow-y: auto;
+}
+.alloc-full td {
+  background: var(--success-soft);
+}
+.alloc-part td {
+  background: var(--amber-soft);
+}
+.alloc-off td {
+  opacity: 0.45;
+}
+/* Truncate long fee names so they never overlap the amount columns. */
+.alloc-feename {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Fees multi-select dropdown */
+.feesel {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 30px 0 11px;
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 13px;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+  overflow: hidden;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2398a29e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+.feesel:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green-soft);
+}
+.feesel-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.feesel-opt {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ink);
+}
+.feesel-opt:hover {
+  background: var(--green-soft);
+}
+.feesel-opt input {
+  width: 15px;
+  height: 15px;
+}
+.feesel-all {
+  font-weight: 600;
+  color: var(--green);
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+  justify-content: flex-start;
+}
+.alloc-note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--amber);
+  background: var(--amber-soft);
+  border: 1px solid var(--amber-line);
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+/* Searchable student picker (typeahead) */
+.picker {
+  position: relative;
+}
+.picker-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  box-shadow: var(--sh-lg);
+  max-height: 264px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.picker-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--ink);
+}
+.picker-opt:hover,
+.picker-opt.active {
+  background: var(--green-soft);
+}
+.picker-opt.active .picker-name {
+  color: var(--green-ink);
+}
+.picker-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+.picker-meta {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+.picker-empty {
+  padding: 10px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+/* Transport stop rows (Fees Structure → Transport) */
+.stoprow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+/* Generate-invoices review: per-standard group header */
+.gen-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 16px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  font-size: 13.5px;
+}
+.gen-head .n {
+  font-size: 11.5px;
+  font-family: var(--mono);
+  color: var(--ink-3);
+}
+.gen-locked td {
+  opacity: 0.55;
+}
+/* Confirmation modal: per-standard count breakdown */
+.gen-break {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.gen-break-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 14px;
+  font-size: 13px;
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--line);
+}
+.gen-break-row:last-child {
+  border-bottom: none;
+}
+.gen-break-row b {
+  font-family: var(--mono);
+  color: var(--ink);
+}
+.gen-break-row.total {
+  background: var(--paper);
+  font-weight: 600;
 }
 
 /* ===== success ===== */
@@ -1240,9 +2166,9 @@ table.rvw {
 
 /* ===== module marketplace ===== */
 .autointro {
-  background: linear-gradient(135deg, #0f3d2e, #0a5c44);
+  background: linear-gradient(135deg, #14306e, #1e3a8a);
   border-radius: var(--r-lg);
-  color: #eaf6f0;
+  color: #e9f0ff;
   padding: 22px 24px;
   margin-bottom: 20px;
   display: flex;
@@ -1259,7 +2185,7 @@ table.rvw {
 }
 .autointro p {
   font-size: 13px;
-  color: #bfe3d3;
+  color: #c3d8ff;
   max-width: 520px;
 }
 .autointro .stat {
@@ -1270,11 +2196,11 @@ table.rvw {
   font-family: var(--mono);
   font-size: 26px;
   display: block;
-  color: #7fe0bc;
+  color: #bcd3ff;
 }
 .autointro .stat span {
   font-size: 11.5px;
-  color: #bfe3d3;
+  color: #c3d8ff;
 }
 .mkt-grid {
   display: grid;
@@ -1385,11 +2311,11 @@ h4.section {
   height: 58px;
   padding: 0 20px;
   border-radius: var(--r-lg);
-  background: var(--card);
-  border: 1px solid var(--line-2);
+  background: linear-gradient(180deg, var(--green-soft) 0%, var(--card) 100%);
+  border: 1px solid var(--green);
   box-shadow:
     0 1px 2px rgba(16, 24, 20, 0.04),
-    0 10px 30px -16px rgba(14, 124, 91, 0.25);
+    0 10px 30px -16px rgba(37, 99, 235, 0.35);
   transition:
     border-color 0.16s ease,
     box-shadow 0.16s ease;
@@ -1398,7 +2324,7 @@ h4.section {
   border-color: var(--green);
   box-shadow:
     0 0 0 4px var(--green-soft),
-    0 14px 34px -14px rgba(14, 124, 91, 0.4);
+    0 14px 34px -14px rgba(37, 99, 235, 0.4);
 }
 .ask-bar .ico {
   width: 21px;
@@ -1415,7 +2341,8 @@ h4.section {
   color: var(--ink);
 }
 .ask-bar input::placeholder {
-  color: var(--ink-3);
+  color: var(--ink-2);
+  font-weight: 500;
 }
 .ask-btn {
   display: inline-flex;
@@ -1429,7 +2356,7 @@ h4.section {
   font-size: 14.5px;
   font-weight: 650;
   letter-spacing: 0.1px;
-  box-shadow: 0 8px 20px -10px rgba(14, 124, 91, 0.55);
+  box-shadow: 0 8px 20px -10px rgba(37, 99, 235, 0.55);
   transition:
     background 0.16s ease,
     transform 0.06s ease;
@@ -1439,6 +2366,12 @@ h4.section {
 }
 .ask-btn:active {
   transform: translateY(1px);
+}
+/* Suggested-prompt chips keep their natural sentence case, not uppercase. */
+.ask-ex {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 13px;
 }
 .ask-btn .ico {
   width: 17px;
