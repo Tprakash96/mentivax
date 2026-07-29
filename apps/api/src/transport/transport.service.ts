@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@mentivax/db';
 import type {
   CreateRouteDto,
   CreateStopDto,
+  LandmarkFare,
   SaveStopFaresDto,
   UpdateRouteDto,
   UpdateStopDto,
@@ -16,6 +18,9 @@ type StopRecord = {
   bothWayFare: number;
   oneWayFare: number;
   rank: number;
+  pickupTime: string | null;
+  dropTime: string | null;
+  landmarks: Prisma.JsonValue;
 };
 
 @Injectable()
@@ -30,6 +35,9 @@ export class TransportService {
       bothWayFare: s.bothWayFare,
       oneWayFare: s.oneWayFare,
       rank: s.rank,
+      pickupTime: s.pickupTime,
+      dropTime: s.dropTime,
+      landmarks: (Array.isArray(s.landmarks) ? s.landmarks : []) as unknown as LandmarkFare[],
     };
   }
 
@@ -106,6 +114,9 @@ export class TransportService {
         bothWayFare: dto.bothWayFare,
         oneWayFare: dto.oneWayFare,
         rank: dto.rank ?? (top?.rank ?? -1) + 1,
+        pickupTime: dto.pickupTime ?? null,
+        dropTime: dto.dropTime ?? null,
+        landmarks: (dto.landmarks ?? []) as unknown as Prisma.InputJsonValue,
       },
     });
     return this.listRoutes(t);
@@ -119,6 +130,10 @@ export class TransportService {
         bothWayFare: dto.bothWayFare,
         oneWayFare: dto.oneWayFare,
         rank: dto.rank,
+        pickupTime: dto.pickupTime === undefined ? undefined : dto.pickupTime || null,
+        dropTime: dto.dropTime === undefined ? undefined : dto.dropTime || null,
+        landmarks:
+          dto.landmarks === undefined ? undefined : (dto.landmarks as unknown as Prisma.InputJsonValue),
       },
     });
     if (count === 0) throw new NotFoundException('Stop not found');

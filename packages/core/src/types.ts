@@ -25,6 +25,13 @@ export interface FeeStructureInput {
   oldAmount: number;
 }
 
+/** A pickup landmark within a stop, with its own fares (paise). */
+export interface LandmarkFare {
+  name: string;
+  bothWayFare: number;
+  oneWayFare: number;
+}
+
 /** A transport stop's fares (paise). One-way is charged for morning/evening only. */
 export interface TransportFareInput {
   stopId: string;
@@ -33,4 +40,6 @@ export interface TransportFareInput {
   /** paise */
   bothWayFare: number;
   oneWayFare: number;
+  /** The pickup landmark this fare is for (when billed per landmark). */
+  landmarkName?: string;
 }

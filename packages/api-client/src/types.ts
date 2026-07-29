@@ -6,12 +6,15 @@ import type {
   DiscountType,
   FeePeriod,
   InvoiceStatus,
+  LandmarkFare,
   ModuleDef,
   PaymentMode,
   PricingMode,
   TransportShift,
   VehicleType,
 } from '@mentivax/core';
+
+export type { LandmarkFare };
 
 /** A catalog module annotated with the current org's entitlement state. */
 export interface ModuleView extends ModuleDef {
@@ -52,6 +55,10 @@ export interface TransportStop {
   bothWayFare: number;
   oneWayFare: number;
   rank: number;
+  /** "HH:MM" pickup / drop times and pickup landmarks (each with its own fares). */
+  pickupTime: string | null;
+  dropTime: string | null;
+  landmarks: LandmarkFare[];
 }
 
 export interface TransportRoute {
@@ -107,6 +114,8 @@ export interface Student {
   phone?: string | null;
   transportStopId?: string | null;
   transportShift?: TransportShift | null;
+  /** Pickup landmark within the stop, if assigned. */
+  transportLandmark?: string | null;
   /** "Route · Stop" label, or null when no transport. */
   transportStopName?: string | null;
   feeExempt: boolean;

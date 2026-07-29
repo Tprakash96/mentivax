@@ -1434,6 +1434,212 @@ table.rvw {
   border-color: var(--green);
   box-shadow: 0 0 0 3px var(--green-soft);
 }
+/* Van details — polished table */
+.van-tbl td {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+/* Inline editable cell: reads as text, reveals a field on hover/focus. */
+.cell-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 550;
+  font-family: var(--ui);
+  transition: background 0.12s, border-color 0.12s;
+}
+.cell-input:hover {
+  border-color: var(--line-2);
+  background: var(--card);
+}
+.cell-input:focus {
+  outline: none;
+  border-color: var(--green);
+  background: var(--card);
+  box-shadow: 0 0 0 3px var(--green-soft);
+}
+/* Vehicle type icon badge */
+.van-ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--green-soft);
+  color: var(--green-ink);
+}
+.van-ic.bus {
+  background: var(--blue-soft, var(--green-soft));
+  color: var(--blue, var(--green-ink));
+}
+/* Van selector dropdown — highlighted: blue background, white text. */
+.van-select {
+  background-color: var(--green);
+  border-color: var(--green);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: var(--primary-glow);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+.van-select:hover {
+  background-color: var(--green-ink);
+  border-color: var(--green-ink);
+}
+.van-select:focus {
+  border-color: var(--green-ink);
+  box-shadow: 0 0 0 3px var(--green-soft);
+}
+.van-select option {
+  color: var(--ink);
+  background: var(--card);
+}
+/* Highlighted van banner above the van-scoped tables (which vehicle you're editing). */
+.van-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--green-soft) 0%, var(--card) 130%);
+  border: 1px solid var(--green);
+}
+.van-banner-num {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--green-ink);
+}
+.van-banner-sub {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin-top: 1px;
+}
+/* Count pill (e.g. "3 stops") */
+.count-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 11px;
+  border-radius: 20px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  font-family: var(--mono);
+}
+/* Stop pickup/drop time input */
+.fs-time {
+  width: 116px;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 13px;
+  font-family: var(--ui);
+}
+.fs-time:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green-soft);
+}
+/* Per-stop landmarks list */
+.lm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-start;
+}
+.lm-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.lm-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: var(--green-soft);
+  color: var(--green-ink);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-family: var(--mono);
+}
+.lm-count .ico {
+  width: 11px;
+  height: 11px;
+}
+.lm-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--line-2);
+  background: var(--card);
+  color: var(--ink-3);
+  cursor: pointer;
+  flex: none;
+}
+.lm-x:hover {
+  color: var(--red);
+  border-color: var(--red);
+}
+.lm-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--green-ink);
+  background: var(--green-soft);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.lm-add:hover {
+  border-color: var(--green);
+}
+/* Stop reorder up/down controls */
+.stop-ord {
+  display: inline-flex;
+  gap: 3px;
+}
+.stop-ord button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid var(--line-2);
+  background: var(--card);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.stop-ord button:hover:not(:disabled) {
+  border-color: var(--ink-3);
+  color: var(--ink);
+  background: var(--hover);
+}
+.stop-ord button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 /* Table pagination footer */
 .pager {
   display: flex;
@@ -2049,66 +2255,106 @@ table.rvw {
 }
 
 /* ===== modal ===== */
+@keyframes scrimIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 .scrim {
   position: fixed;
   inset: 0;
-  background: rgba(18, 24, 22, 0.4);
+  background: rgba(15, 23, 32, 0.5);
+  backdrop-filter: blur(5px) saturate(1.05);
+  -webkit-backdrop-filter: blur(5px) saturate(1.05);
   z-index: 60;
   display: grid;
   place-items: center;
-  padding: 20px;
+  padding: 24px;
+  animation: scrimIn 0.16s ease-out;
 }
 .modal {
   width: min(560px, 94vw);
   max-height: 90vh;
   background: var(--card);
   border: 1px solid var(--line-2);
-  border-radius: 16px;
-  box-shadow: var(--sh-lg);
+  border-radius: 18px;
+  box-shadow:
+    0 24px 60px -14px rgba(15, 23, 42, 0.38),
+    0 6px 16px -6px rgba(15, 23, 42, 0.18);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  animation: modalIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .modal .mh {
-  padding: 16px 20px 14px;
+  padding: 20px 22px 16px;
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: flex-start;
   gap: 12px;
 }
 .modal .mh b {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 .modal .mh span {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--ink-3);
   display: block;
-  margin-top: 1px;
+  margin-top: 3px;
+  line-height: 1.45;
 }
 .modal .mh .x {
   margin-left: auto;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   display: grid;
   place-items: center;
   color: var(--ink-3);
+  cursor: pointer;
+  flex: none;
+  transition: background 0.12s, color 0.12s;
+}
+.modal .mh .x:hover {
+  background: var(--hover);
+  color: var(--ink);
 }
 .modal .mb {
   flex: 1;
   overflow: auto;
-  padding: 16px 20px;
+  padding: 20px 22px;
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 16px;
 }
 .modal .mf {
-  padding: 13px 20px;
+  padding: 15px 22px;
   border-top: 1px solid var(--line);
+  background: var(--paper);
   display: flex;
   gap: 10px;
   justify-content: flex-end;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scrim,
+  .modal {
+    animation: none;
+  }
 }
 .totalbar {
   display: flex;

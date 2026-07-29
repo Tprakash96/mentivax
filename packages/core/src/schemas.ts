@@ -43,6 +43,8 @@ export type CreateStudentDto = z.infer<typeof createStudentSchema>;
 export const updateStudentTransportSchema = z.object({
   transportStopId: z.string().nullable(),
   transportShift: transportShift.nullable(),
+  /** Which pickup landmark within the stop (name), if any. */
+  transportLandmark: z.string().nullish(),
 });
 export type UpdateStudentTransportDto = z.infer<typeof updateStudentTransportSchema>;
 
@@ -88,6 +90,14 @@ export const updateRouteSchema = z.object({
 });
 export type UpdateRouteDto = z.infer<typeof updateRouteSchema>;
 
+/** A pickup landmark within a stop, with its own fares (paise). */
+export const landmarkFareSchema = z.object({
+  name: z.string().min(1).max(120),
+  bothWayFare: z.number().int().nonnegative().default(0),
+  oneWayFare: z.number().int().nonnegative().default(0),
+});
+export type LandmarkFareDto = z.infer<typeof landmarkFareSchema>;
+
 export const createStopSchema = z.object({
   routeId: z.string().min(1),
   name: z.string().min(1).max(80),
@@ -95,6 +105,10 @@ export const createStopSchema = z.object({
   bothWayFare: z.number().int().nonnegative().default(0),
   oneWayFare: z.number().int().nonnegative().default(0),
   rank: z.number().int().nonnegative().optional(),
+  /** "HH:MM" pickup / drop times and pickup landmarks (each with its own fares). */
+  pickupTime: z.string().max(10).nullish(),
+  dropTime: z.string().max(10).nullish(),
+  landmarks: z.array(landmarkFareSchema).optional(),
 });
 export type CreateStopDto = z.infer<typeof createStopSchema>;
 
@@ -103,6 +117,9 @@ export const updateStopSchema = z.object({
   bothWayFare: z.number().int().nonnegative().optional(),
   oneWayFare: z.number().int().nonnegative().optional(),
   rank: z.number().int().nonnegative().optional(),
+  pickupTime: z.string().max(10).nullish(),
+  dropTime: z.string().max(10).nullish(),
+  landmarks: z.array(landmarkFareSchema).optional(),
 });
 export type UpdateStopDto = z.infer<typeof updateStopSchema>;
 

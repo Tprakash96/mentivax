@@ -14,6 +14,7 @@ type StudentRecord = {
   phone: string | null;
   transportStopId: string | null;
   transportShift: TransportShift | null;
+  transportLandmark: string | null;
   feeExempt: boolean;
   discountType: DiscountType;
   discountValue: number;
@@ -43,6 +44,7 @@ function toDto(s: StudentRecord): Student {
     phone: s.phone,
     transportStopId: s.transportStopId,
     transportShift: s.transportShift,
+    transportLandmark: s.transportLandmark,
     transportStopName: s.transportStop
       ? `${s.transportStop.route.name} · ${s.transportStop.name}`
       : null,
@@ -126,6 +128,7 @@ export class StudentsService {
       data: {
         transportStopId: stopId,
         transportShift: stopId ? dto.transportShift : null,
+        transportLandmark: stopId ? dto.transportLandmark || null : null,
       },
     });
     if (count === 0) throw new NotFoundException('Student not found');

@@ -137,9 +137,10 @@ export function buildTransportLine(
   const gross = resolveTransportFare(fare, shift);
   if (gross <= 0) return null;
   const shiftLabel = shift === 'BOTH' ? 'Both ways' : shift === 'MORNING' ? 'Morning' : 'Evening';
+  const place = fare.landmarkName ? `${fare.stopName} · ${fare.landmarkName}` : fare.stopName;
   return {
     key: TRANSPORT_FEE_KEY,
-    name: `Transport — ${fare.routeName} · ${fare.stopName} (${shiftLabel})`,
+    name: `Transport — ${fare.routeName} · ${place} (${shiftLabel})`,
     period: 'MONTHLY',
     gross,
     discountType: 'NONE',
