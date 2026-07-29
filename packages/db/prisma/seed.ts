@@ -10,16 +10,20 @@ import {
   PrismaClient,
   FeePeriod,
   PricingMode,
-  Role,
   ModuleStatus,
   DiscountType,
   InvoiceStatus,
   PaymentMode,
 } from '@prisma/client';
+import { hashSync } from 'bcryptjs';
+import { OWNER_ROLE_KEY, SYSTEM_ROLES, systemRolePermissions } from '@mentivax/core';
 
 const prisma = new PrismaClient();
 
 const rupees = (n: number) => Math.round(n) * 100;
+
+/** Shared demo password for every seeded account. Local scaffold only. */
+const DEMO_PASSWORD = 'mentivax123';
 
 // Fee inputs + stop info captured during setup, reused to build invoices.
 type FeeInput = {
@@ -213,6 +217,9 @@ async function main() {
   await prisma.schoolClass.deleteMany();
   await prisma.academicYear.deleteMany();
   await prisma.membership.deleteMany();
+  await prisma.rolePermission.deleteMany();
+  await prisma.role.deleteMany();
+  await prisma.refreshToken.deleteMany();
   await prisma.user.deleteMany();
   await prisma.organization.deleteMany();
 
@@ -226,14 +233,54 @@ async function main() {
   });
   console.log(`Organization: ${org.name}`);
 
+  // Every org gets its own copy of the code-defined system roles, exactly as
+  // AdminService.createOrganization does when provisioning a real tenant.
+  const roleIds: Record<string, string> = {};
+  for (const def of SYSTEM_ROLES) {
+    const role = await prisma.role.create({
+      data: {
+        organizationId: org.id,
+        key: def.key,
+        name: def.name,
+        description: def.description,
+        isSystem: true,
+        permissions: { create: systemRolePermissions(def.key).map((permission) => ({ permission })) },
+      },
+    });
+    roleIds[def.key] = role.id;
+  }
+  console.log(`Roles: ${SYSTEM_ROLES.map((r) => r.name).join(', ')}`);
+
+  // Demo passwords. Fine for a local scaffold; rotate before any real use.
+  const demoPassword = hashSync(DEMO_PASSWORD, 10);
+
+  const platformAdmin = await prisma.user.create({
+    data: {
+      email: 'admin@mentivax.com',
+      name: 'Mentivax Platform Admin',
+      passwordHash: demoPassword,
+      isPlatformAdmin: true,
+    },
+  });
+
   const user = await prisma.user.create({
     data: {
       email: 'admin@agaram.school',
       name: 'Agaram Admin',
-      memberships: { create: { organizationId: org.id, role: Role.OWNER } },
+      passwordHash: demoPassword,
+      memberships: { create: { organizationId: org.id, roleId: roleIds[OWNER_ROLE_KEY]! } },
     },
   });
-  console.log(`User: ${user.email} (password auth is stubbed in this scaffold)`);
+
+  // A second staff account, to show RBAC doing something visible out of the box.
+  const accountant = await prisma.user.create({
+    data: {
+      email: 'accounts@agaram.school',
+      name: 'Priya Accountant',
+      passwordHash: demoPassword,
+      memberships: { create: { organizationId: org.id, roleId: roleIds['accountant']! } },
+    },
+  });
 
   // Plug in modules for this school. 'students' is core (always on) but we add
   // a row for completeness; 'fees' is purchased; 'communication' is on trial.
@@ -362,6 +409,11 @@ async function main() {
   await seedRoster(org.id, year.id, year.label, classByName, feesByClass, stopByName);
 
   console.log(`Seeded ${classes.length} classes, ${feeTypes.length} fee types, ${ROUTES.length} transport routes.`);
+  console.log('');
+  console.log('Sign in with:');
+  console.log(`  Platform admin : ${platformAdmin.email} / ${DEMO_PASSWORD}`);
+  console.log(`  School owner   : ${user.email} / ${DEMO_PASSWORD}`);
+  console.log(`  Accountant     : ${accountant.email} / ${DEMO_PASSWORD}`);
   console.log('Done.');
 }
 

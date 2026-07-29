@@ -18,6 +18,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ZodBody } from '../common/zod-body.pipe';
 import { Tenant } from '../tenant/tenant.decorator';
 import type { TenantContext } from '../tenant/tenant.types';
+import { RequirePermissions } from '../auth/auth.decorators';
 
 type YearRecord = { id: string; label: string; startDate: Date; endDate: Date; isActive: boolean };
 
@@ -40,6 +41,7 @@ export class FinancialYearsController {
   }
 
   @Get()
+  @RequirePermissions('settings:read')
   async list(@Tenant() t: TenantContext) {
     const years = await this.prisma.academicYear.findMany({
       where: { organizationId: t.organizationId },
@@ -49,6 +51,7 @@ export class FinancialYearsController {
   }
 
   @Post()
+  @RequirePermissions('settings:write')
   async create(
     @Tenant() t: TenantContext,
     @Body(new ZodBody(createFinancialYearSchema)) dto: CreateFinancialYearDto,
@@ -79,6 +82,7 @@ export class FinancialYearsController {
   }
 
   @Patch(':id')
+  @RequirePermissions('settings:write')
   async update(
     @Tenant() t: TenantContext,
     @Param('id') id: string,
@@ -100,6 +104,7 @@ export class FinancialYearsController {
   }
 
   @Post(':id/activate')
+  @RequirePermissions('settings:write')
   async activate(@Tenant() t: TenantContext, @Param('id') id: string) {
     const target = await this.prisma.academicYear.findFirst({
       where: { id, organizationId: t.organizationId },

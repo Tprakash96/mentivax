@@ -27,6 +27,7 @@ import { Tenant } from '../tenant/tenant.decorator';
 import type { TenantContext } from '../tenant/tenant.types';
 import { ModuleGuard } from '../modules/module.guard';
 import { RequiresModule } from '../modules/requires-module.decorator';
+import { RequirePermissions } from '../auth/auth.decorators';
 
 /** Slugify a fee name into a stable engine key, e.g. "Van Fee" -> "van-fee". */
 function slugify(name: string): string {
@@ -49,6 +50,7 @@ export class ClassesController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get()
+  @RequirePermissions('classes:read')
   async list(@Tenant() t: TenantContext) {
     const classes = await this.prisma.schoolClass.findMany({
       where: { organizationId: t.organizationId, academicYearId: t.academicYearId },
@@ -64,6 +66,7 @@ export class ClassesController {
   }
 
   @Post()
+  @RequirePermissions('classes:write')
   async create(@Tenant() t: TenantContext, @Body(new ZodBody(createClassSchema)) dto: CreateClassDto) {
     const name = dto.name.trim();
     const dupe = await this.prisma.schoolClass.findFirst({
@@ -84,6 +87,7 @@ export class ClassesController {
   }
 
   @Patch(':id')
+  @RequirePermissions('classes:write')
   async update(
     @Tenant() t: TenantContext,
     @Param('id') id: string,
@@ -111,6 +115,7 @@ export class ClassesController {
   }
 
   @Delete(':id')
+  @RequirePermissions('classes:write')
   @HttpCode(204)
   async remove(@Tenant() t: TenantContext, @Param('id') id: string) {
     const cls = await this.prisma.schoolClass.findFirst({
@@ -156,6 +161,7 @@ export class FeeTypesController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get()
+  @RequirePermissions('fees:read')
   async list(@Tenant() t: TenantContext) {
     const types = await this.prisma.feeType.findMany({
       where: { organizationId: t.organizationId },
@@ -166,6 +172,7 @@ export class FeeTypesController {
 
   /** Create a fee item; auto-generates a stable slug key unique per org. */
   @Post()
+  @RequirePermissions('fees:write')
   @RequiresModule('fees')
   @UseGuards(ModuleGuard)
   async create(@Tenant() t: TenantContext, @Body(new ZodBody(createFeeTypeSchema)) dto: CreateFeeTypeDto) {
@@ -188,6 +195,7 @@ export class FeeTypesController {
 
   /** Update a fee item's name / duration / pricing (school-wide, all classes). */
   @Patch(':id')
+  @RequirePermissions('fees:write')
   @RequiresModule('fees')
   @UseGuards(ModuleGuard)
   async update(
@@ -214,6 +222,7 @@ export class FeeTypesController {
   }
 
   @Delete(':id')
+  @RequirePermissions('fees:write')
   @RequiresModule('fees')
   @UseGuards(ModuleGuard)
   @HttpCode(204)

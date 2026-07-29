@@ -218,3 +218,138 @@ export interface PaymentBreakdown {
   amount: number;
   rows: { feeName: string; period: string; amount: number }[];
 }
+
+// ---------------------------------------------------------------------------
+// Identity, tenancy administration, and RBAC
+// ---------------------------------------------------------------------------
+
+export interface AuthenticatedUser {
+  id: string;
+  email: string;
+  name: string;
+  /** SaaS operator: may administer every tenant from the platform console. */
+  isPlatformAdmin: boolean;
+}
+
+/** One school the signed-in user may enter, with their authority inside it. */
+export interface SessionMembership {
+  organizationId: string;
+  organizationName: string;
+  organizationSlug: string;
+  shortCode: string;
+  roleId: string;
+  roleKey: string;
+  roleName: string;
+  /** Already intersected with the org's enabled modules. */
+  permissions: string[];
+}
+
+export interface Session {
+  user: AuthenticatedUser;
+  memberships: SessionMembership[];
+}
+
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+  /** Seconds until the access token expires. */
+  expiresIn: number;
+}
+
+export type LoginResult = AuthTokens & Session;
+
+// --- Org-level team management ---------------------------------------------
+
+export interface Member {
+  /** Membership id — the handle for updates, not the user id. */
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  roleId: string;
+  roleKey: string;
+  roleName: string;
+  isActive: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  isSelf: boolean;
+}
+
+export interface RoleView {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  /** Built-in roles are provisioned from code and cannot be edited. */
+  isSystem: boolean;
+  permissions: string[];
+  memberCount: number;
+}
+
+export interface PermissionCatalogEntry {
+  key: string;
+  name: string;
+  description: string;
+  module: string;
+}
+
+export interface PermissionCatalog {
+  groups: { group: string; permissions: PermissionCatalogEntry[] }[];
+  /** Keys hidden because the owning module is not enabled for this org. */
+  unavailable: string[];
+}
+
+// --- Platform admin console --------------------------------------------------
+
+export interface AdminOrgSummary {
+  id: string;
+  slug: string;
+  name: string;
+  shortCode: string;
+  currency: string;
+  isActive: boolean;
+  createdAt: string;
+  memberCount: number;
+  studentCount: number;
+  modules: string[];
+  activeYear: string | null;
+}
+
+export interface AdminOrgDetail {
+  id: string;
+  slug: string;
+  name: string;
+  shortCode: string;
+  currency: string;
+  timezone: string;
+  isActive: boolean;
+  createdAt: string;
+  academicYears: { id: string; label: string; isActive: boolean }[];
+  members: {
+    id: string;
+    userId: string;
+    name: string;
+    email: string;
+    roleId: string;
+    roleName: string;
+    roleKey: string;
+    isActive: boolean;
+    lastLoginAt: string | null;
+  }[];
+}
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  isPlatformAdmin: boolean;
+  isActive: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  organizations: {
+    organizationId: string;
+    name: string;
+    shortCode: string;
+    roleName: string;
+  }[];
+}

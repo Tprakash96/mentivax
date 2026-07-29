@@ -10,7 +10,10 @@ import type {
   CreateFeeTypeDto,
   CreateFinancialYearDto,
   CreateInvoiceDto,
+  CreateMemberDto,
+  CreateOrganizationDto,
   CreatePaymentDto,
+  CreateRoleDto,
   CreateRouteDto,
   CreateStopDto,
   CreateStudentDto,
@@ -24,14 +27,25 @@ import type {
   UpdateFeeTypeDto,
   UpdateFinancialYearDto,
   UpdateInvoiceDto,
+  UpdateMemberDto,
+  UpdateOrganizationDto,
   UpdatePaymentDto,
+  UpdateRoleDto,
   UpdateRouteDto,
   UpdateStopDto,
   UpdateStudentTransportDto,
 } from '@mentivax/core';
 import type {
   AcademicYear,
+  AdminOrgDetail,
+  AdminOrgSummary,
+  AdminUser,
   BatchPreview,
+  LoginResult,
+  Member,
+  PermissionCatalog,
+  RoleView,
+  Session,
   FeeStructureRow,
   FeeType,
   FinancialYear,
@@ -52,8 +66,14 @@ export * from './types';
 
 export interface ClientOptions {
   baseUrl: string;
-  /** Returns the bearer token (or null when unauthenticated). */
+  /** Returns the bearer access token (or null when unauthenticated). */
   getToken?: () => string | null | undefined;
+  /** Returns the refresh token, enabling transparent retry of expired calls. */
+  getRefreshToken?: () => string | null | undefined;
+  /** Called with the new token pair after a successful silent refresh. */
+  onTokens?: (tokens: LoginResult) => void;
+  /** Called when the refresh token is rejected — the client should sign out. */
+  onAuthFailure?: () => void;
   /** Returns the active organization id to scope requests. */
   getOrgId?: () => string | null | undefined;
   /** Custom fetch (for React Native / Node polyfills). */
@@ -74,18 +94,60 @@ export class ApiError extends Error {
 export function createClient(opts: ClientOptions) {
   const doFetch = opts.fetch ?? globalThis.fetch;
 
-  async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  /**
+   * In-flight refresh, shared by every caller.
+   *
+   * Without this, a page that fires six requests at once on an expired token
+   * would kick off six refreshes; because the API rotates refresh tokens and
+   * treats reuse as a leak, five of them would fail and revoke the session.
+   */
+  let refreshing: Promise<boolean> | null = null;
+
+  async function refreshTokens(): Promise<boolean> {
+    const refreshToken = opts.getRefreshToken?.();
+    if (!refreshToken) return false;
+
+    const res = await doFetch(`${opts.baseUrl}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!res.ok) {
+      opts.onAuthFailure?.();
+      return false;
+    }
+
+    const result = (await res.json()) as LoginResult;
+    opts.onTokens?.(result);
+    return true;
+  }
+
+  async function send(method: string, path: string, body?: unknown): Promise<Response> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     const token = opts.getToken?.();
     if (token) headers.Authorization = `Bearer ${token}`;
     const orgId = opts.getOrgId?.();
     if (orgId) headers['x-organization-id'] = orgId;
 
-    const res = await doFetch(`${opts.baseUrl}${path}`, {
+    return doFetch(`${opts.baseUrl}${path}`, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
+  }
+
+  async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    let res = await send(method, path, body);
+
+    // A 401 on anything but the auth endpoints means the access token aged out.
+    // Refresh once and replay; a second 401 is a real authentication failure.
+    if (res.status === 401 && !path.startsWith('/auth/')) {
+      refreshing ??= refreshTokens().finally(() => {
+        refreshing = null;
+      });
+      if (await refreshing) res = await send(method, path, body);
+    }
 
     if (!res.ok) {
       let payload: unknown;
@@ -111,6 +173,58 @@ export function createClient(opts: ClientOptions) {
 
   return {
     request,
+    auth: {
+      login: (email: string, password: string) =>
+        request<LoginResult>('POST', '/auth/login', { email, password }),
+      /** Restores the session on app boot from a stored access token. */
+      me: () => request<Session>('GET', '/auth/me'),
+      /** Usually unnecessary — `request` refreshes transparently on a 401. */
+      refresh: (refreshToken: string) =>
+        request<LoginResult>('POST', '/auth/refresh', { refreshToken }),
+      logout: (refreshToken?: string) =>
+        request<{ ok: true }>('POST', '/auth/logout', { refreshToken }),
+      changePassword: (currentPassword: string, newPassword: string) =>
+        request<{ ok: true }>('POST', '/auth/change-password', { currentPassword, newPassword }),
+    },
+    /** Team management for the active organization. */
+    members: {
+      list: () => request<Member[]>('GET', '/members'),
+      create: (dto: CreateMemberDto) => request<Member[]>('POST', '/members', dto),
+      update: (id: string, dto: UpdateMemberDto) => request<Member[]>('PATCH', `/members/${id}`, dto),
+      remove: (id: string) => request<Member[]>('DELETE', `/members/${id}`),
+      resetPassword: (id: string, newPassword: string) =>
+        request<{ ok: true }>('POST', `/members/${id}/reset-password`, { newPassword }),
+    },
+    /** Roles and permission grants for the active organization. */
+    roles: {
+      list: () => request<RoleView[]>('GET', '/roles'),
+      /** The permission checklist, limited to modules this org has enabled. */
+      permissions: () => request<PermissionCatalog>('GET', '/roles/permissions'),
+      create: (dto: CreateRoleDto) => request<RoleView[]>('POST', '/roles', dto),
+      update: (id: string, dto: UpdateRoleDto) => request<RoleView[]>('PATCH', `/roles/${id}`, dto),
+      remove: (id: string) => request<RoleView[]>('DELETE', `/roles/${id}`),
+    },
+    /** SaaS-operator console. Requires a platform admin account. */
+    admin: {
+      organizations: {
+        list: () => request<AdminOrgSummary[]>('GET', '/admin/organizations'),
+        get: (id: string) => request<AdminOrgDetail>('GET', `/admin/organizations/${id}`),
+        create: (dto: CreateOrganizationDto) =>
+          request<AdminOrgDetail>('POST', '/admin/organizations', dto),
+        update: (id: string, dto: UpdateOrganizationDto) =>
+          request<AdminOrgDetail>('PATCH', `/admin/organizations/${id}`, dto),
+        modules: (id: string) => request<ModuleView[]>('GET', `/admin/organizations/${id}/modules`),
+        enableModule: (id: string, key: string, dto: EnableModuleDto = { status: 'ACTIVE' }) =>
+          request<ModuleView[]>('POST', `/admin/organizations/${id}/modules/${key}/enable`, dto),
+        disableModule: (id: string, key: string) =>
+          request<ModuleView[]>('POST', `/admin/organizations/${id}/modules/${key}/disable`, {}),
+      },
+      users: {
+        list: () => request<AdminUser[]>('GET', '/admin/users'),
+        setActive: (id: string, isActive: boolean) =>
+          request<{ ok: true }>('PATCH', `/admin/users/${id}/active`, { isActive }),
+      },
+    },
     modules: {
       /** Full catalog annotated with this org's entitlement state. */
       catalog: () => request<ModuleView[]>('GET', '/modules'),

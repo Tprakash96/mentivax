@@ -10,7 +10,10 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "prisma"],
+  "files": [
+    "dist",
+    "prisma"
+  ],
   "scripts": {
     "generate": "prisma generate",
     "build": "prisma generate && tsc -p tsconfig.build.json",
@@ -29,7 +32,9 @@
   },
   "devDependencies": {
     "@mentivax/config": "workspace:*",
+    "@mentivax/core": "workspace:^",
     "@types/node": "^20.16.10",
+    "bcryptjs": "^3.0.3",
     "dotenv-cli": "^7.4.2",
     "prisma": "^5.20.0",
     "tsx": "^4.19.1",
