@@ -3,6 +3,7 @@ import { updateFeeStructureSchema, type UpdateFeeStructureDto } from '@mentivax/
 import { ZodBody } from '../common/zod-body.pipe';
 import { Tenant } from '../tenant/tenant.decorator';
 import type { TenantContext } from '../tenant/tenant.types';
+import { RequirePermissions } from '../auth/auth.decorators';
 import { ModuleGuard } from '../modules/module.guard';
 import { RequiresModule } from '../modules/requires-module.decorator';
 import { FeeStructureService } from './fee-structure.service';
@@ -14,12 +15,14 @@ export class FeeStructureController {
   constructor(private readonly service: FeeStructureService) {}
 
   @Get()
+  @RequirePermissions('fees:read')
   get(@Tenant() t: TenantContext, @Query('classId') classId?: string) {
     if (!classId) throw new BadRequestException('classId is required');
     return this.service.getRows(t, classId);
   }
 
   @Put()
+  @RequirePermissions('fees:write')
   update(
     @Tenant() t: TenantContext,
     @Body(new ZodBody(updateFeeStructureSchema)) dto: UpdateFeeStructureDto,

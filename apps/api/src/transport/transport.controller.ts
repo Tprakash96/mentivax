@@ -14,6 +14,7 @@ import {
 import { ZodBody } from '../common/zod-body.pipe';
 import { Tenant } from '../tenant/tenant.decorator';
 import type { TenantContext } from '../tenant/tenant.types';
+import { RequirePermissions } from '../auth/auth.decorators';
 import { ModuleGuard } from '../modules/module.guard';
 import { RequiresModule } from '../modules/requires-module.decorator';
 import { TransportService } from './transport.service';
@@ -25,16 +26,19 @@ export class TransportController {
   constructor(private readonly service: TransportService) {}
 
   @Get('routes')
+  @RequirePermissions('transport:read')
   listRoutes(@Tenant() t: TenantContext) {
     return this.service.listRoutes(t);
   }
 
   @Post('routes')
+  @RequirePermissions('transport:write')
   createRoute(@Tenant() t: TenantContext, @Body(new ZodBody(createRouteSchema)) dto: CreateRouteDto) {
     return this.service.createRoute(t, dto);
   }
 
   @Patch('routes/:id')
+  @RequirePermissions('transport:write')
   updateRoute(
     @Tenant() t: TenantContext,
     @Param('id') id: string,
@@ -44,21 +48,25 @@ export class TransportController {
   }
 
   @Delete('routes/:id')
+  @RequirePermissions('transport:write')
   deleteRoute(@Tenant() t: TenantContext, @Param('id') id: string) {
     return this.service.deleteRoute(t, id);
   }
 
   @Post('stops')
+  @RequirePermissions('transport:write')
   createStop(@Tenant() t: TenantContext, @Body(new ZodBody(createStopSchema)) dto: CreateStopDto) {
     return this.service.createStop(t, dto);
   }
 
   @Put('stops/fares')
+  @RequirePermissions('transport:write')
   saveFares(@Tenant() t: TenantContext, @Body(new ZodBody(saveStopFaresSchema)) dto: SaveStopFaresDto) {
     return this.service.saveFares(t, dto);
   }
 
   @Patch('stops/:id')
+  @RequirePermissions('transport:write')
   updateStop(
     @Tenant() t: TenantContext,
     @Param('id') id: string,
@@ -68,6 +76,7 @@ export class TransportController {
   }
 
   @Delete('stops/:id')
+  @RequirePermissions('transport:write')
   deleteStop(@Tenant() t: TenantContext, @Param('id') id: string) {
     return this.service.deleteStop(t, id);
   }

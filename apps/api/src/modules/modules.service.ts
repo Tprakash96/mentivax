@@ -39,24 +39,14 @@ export class ModulesService {
     return effectiveModuleKeys(rows.map((r) => r.moduleKey));
   }
 
-  /** The catalog, annotated with this org's entitlement state. */
-  async catalog(t: TenantContext): Promise<ModuleView[]> {
-    const rows = await this.prisma.organizationModule.findMany({
-      where: { organizationId: t.organizationId },
-    });
-    const byKey = new Map(rows.map((r) => [r.moduleKey, r]));
-    const enabled = new Set(t.enabledModules);
-
-    return MODULES.map((m) => {
-      const row = byKey.get(m.key);
-      return {
-        ...m,
-        enabled: enabled.has(m.key),
-        status: m.core ? 'ACTIVE' : (row?.status ?? null),
-        expiresAt: row?.expiresAt ? row.expiresAt.toISOString() : null,
-        missingDependencies: getMissingDependencies(m.key, enabled),
-      };
-    });
+  /**
+   * The catalog, annotated with an org's entitlement state.
+   *
+   * Takes a plain org id rather than a TenantContext so the platform admin
+   * console can render the same view for any tenant it administers.
+   */
+  catalog(organizationId: string): Promise<ModuleView[]> {
+    return this.catalogFresh(organizationId);
   }
 
   enabled(t: TenantContext): string[] {
@@ -64,11 +54,11 @@ export class ModulesService {
   }
 
   /** Plug a module in for the org. */
-  async enable(t: TenantContext, key: string, dto: EnableModuleDto): Promise<ModuleView[]> {
+  async enable(organizationId: string, key: string, dto: EnableModuleDto): Promise<ModuleView[]> {
     if (!isValidModuleKey(key)) throw new BadRequestException(`Unknown module "${key}"`);
     if (MODULE_MAP[key]!.core) throw new BadRequestException(`"${key}" is a core module and is always on`);
 
-    const enabled = await this.enabledKeys(t.organizationId);
+    const enabled = await this.enabledKeys(organizationId);
     const missing = getMissingDependencies(key, enabled);
     if (missing.length) {
       throw new BadRequestException({
@@ -80,9 +70,9 @@ export class ModulesService {
     }
 
     await this.prisma.organizationModule.upsert({
-      where: { organizationId_moduleKey: { organizationId: t.organizationId, moduleKey: key } },
+      where: { organizationId_moduleKey: { organizationId, moduleKey: key } },
       create: {
-        organizationId: t.organizationId,
+        organizationId,
         moduleKey: key,
         status: dto.status,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
@@ -95,17 +85,17 @@ export class ModulesService {
       },
     });
 
-    return this.catalogFresh(t.organizationId);
+    return this.catalogFresh(organizationId);
   }
 
   /** Plug a module out. Refuses if other enabled modules depend on it. */
-  async disable(t: TenantContext, key: string): Promise<ModuleView[]> {
+  async disable(organizationId: string, key: string): Promise<ModuleView[]> {
     if (!isValidModuleKey(key)) throw new BadRequestException(`Unknown module "${key}"`);
     if (MODULE_MAP[key]!.core || CORE_MODULE_KEYS.includes(key)) {
       throw new BadRequestException(`"${key}" is a core module and cannot be disabled`);
     }
 
-    const enabled = await this.enabledKeys(t.organizationId);
+    const enabled = await this.enabledKeys(organizationId);
     const dependents = getDependents(key, enabled);
     if (dependents.length) {
       throw new BadRequestException({
@@ -117,10 +107,10 @@ export class ModulesService {
     }
 
     await this.prisma.organizationModule.deleteMany({
-      where: { organizationId: t.organizationId, moduleKey: key },
+      where: { organizationId, moduleKey: key },
     });
 
-    return this.catalogFresh(t.organizationId);
+    return this.catalogFresh(organizationId);
   }
 
   /** Rebuild the catalog view from fresh DB state (after a mutation). */

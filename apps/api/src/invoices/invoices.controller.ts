@@ -14,6 +14,7 @@ import {
 import { ZodBody } from '../common/zod-body.pipe';
 import { Tenant } from '../tenant/tenant.decorator';
 import type { TenantContext } from '../tenant/tenant.types';
+import { RequirePermissions } from '../auth/auth.decorators';
 import { ModuleGuard } from '../modules/module.guard';
 import { RequiresModule } from '../modules/requires-module.decorator';
 import { InvoicesService } from './invoices.service';
@@ -29,6 +30,7 @@ export class InvoicesController {
   ) {}
 
   @Get()
+  @RequirePermissions('invoices:read')
   list(
     @Tenant() t: TenantContext,
     @Query('status') status?: string,
@@ -39,12 +41,14 @@ export class InvoicesController {
 
   /** Review rows for the Generate screen: each student's base fee + adjustments. */
   @Get('generate/preview')
+  @RequirePermissions('invoices:read')
   generatePreview(@Tenant() t: TenantContext) {
     return this.generation.previewForYear(t);
   }
 
   /** Period-wise split for one student's invoice under a fee scope (Add-invoice preview). */
   @Get('single/preview')
+  @RequirePermissions('invoices:read')
   previewSingle(
     @Tenant() t: TenantContext,
     @Query('studentId') studentId: string,
@@ -56,6 +60,7 @@ export class InvoicesController {
 
   /** Create a single invoice for one student. */
   @Post('single')
+  @RequirePermissions('invoices:write')
   createOne(
     @Tenant() t: TenantContext,
     @Body(new ZodBody(createInvoiceSchema)) dto: CreateInvoiceDto,
@@ -65,6 +70,7 @@ export class InvoicesController {
 
   /** Auto-generate invoices for the roster (academic + transport per student). */
   @Post('generate')
+  @RequirePermissions('invoices:write')
   generate(
     @Tenant() t: TenantContext,
     @Body(new ZodBody(generateInvoicesSchema)) dto: GenerateInvoicesDto,
@@ -73,6 +79,7 @@ export class InvoicesController {
   }
 
   @Post('batch/preview')
+  @RequirePermissions('invoices:read')
   previewBatch(
     @Tenant() t: TenantContext,
     @Body(new ZodBody(previewBatchSchema)) dto: PreviewBatchDto,
@@ -81,6 +88,7 @@ export class InvoicesController {
   }
 
   @Post('batch')
+  @RequirePermissions('invoices:write')
   createBatch(
     @Tenant() t: TenantContext,
     @Body(new ZodBody(createBatchSchema)) dto: CreateBatchDto,
@@ -89,6 +97,7 @@ export class InvoicesController {
   }
 
   @Patch(':id')
+  @RequirePermissions('invoices:write')
   update(
     @Tenant() t: TenantContext,
     @Param('id') id: string,
@@ -98,6 +107,7 @@ export class InvoicesController {
   }
 
   @Get(':id')
+  @RequirePermissions('invoices:read')
   get(@Tenant() t: TenantContext, @Param('id') id: string) {
     return this.service.get(t, id);
   }

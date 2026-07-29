@@ -30,9 +30,12 @@ model Organization {
   /// ISO 4217, defaults to Indian Rupee
   currency  String   @default("INR")
   timezone  String   @default("Asia/Kolkata")
+  /// Suspended orgs stay in the database but every sign-in to them is refused.
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  roles         Role[]
   memberships   Membership[]
   academicYears AcademicYear[]
   classes       SchoolClass[]
@@ -81,19 +84,75 @@ model User {
   id           String       @id @default(cuid())
   email        String       @unique
   name         String
-  /// Hashed password. Auth is a stub in this scaffold.
+  /// bcrypt hash. Null only for accounts provisioned before a password is set.
   passwordHash String?
+  /// SaaS-operator account: may create organizations and administer every
+  /// tenant. Not scoped to any organization and never granted via Membership.
+  isPlatformAdmin Boolean   @default(false)
+  /// Deactivated users keep their history but cannot sign in.
+  isActive     Boolean      @default(true)
+  lastLoginAt  DateTime?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
-  memberships  Membership[]
+
+  memberships   Membership[]
+  refreshTokens RefreshToken[]
 }
 
-enum Role {
-  OWNER
-  ADMIN
-  ACCOUNTANT
-  TEACHER
-  VIEWER
+/// A long-lived refresh token, stored hashed so a database leak cannot be
+/// replayed. Rotated on every use; the previous row is revoked.
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  /// SHA-256 of the opaque token string. The raw token is never persisted.
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  userAgent String?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// A named set of permissions within one organization.
+///
+/// Every org gets its own copy of the system roles (see SYSTEM_ROLES in
+/// @mentivax/core) at provisioning time, marked `isSystem` so the UI can show
+/// them but block edits and deletion. Orgs may add their own roles alongside.
+/// Holding the rows per-org (rather than sharing global templates) keeps the
+/// unique constraint simple and lets a school's roles evolve independently.
+model Role {
+  id             String       @id @default(cuid())
+  organizationId String
+  /// Stable within the org, e.g. "owner" or a slug for a custom role.
+  key            String
+  name           String
+  description    String?
+  /// System roles are provisioned from code and cannot be edited or deleted.
+  isSystem       Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissions  RolePermission[]
+  memberships  Membership[]
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+}
+
+/// One granted permission key on a role. Keys come from the PERMISSIONS
+/// catalog in @mentivax/core; unknown keys are ignored at check time.
+model RolePermission {
+  id         String @id @default(cuid())
+  roleId     String
+  permission String
+  role       Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permission])
+  @@index([roleId])
 }
 
 /// Links a user to an organization with a role. A user may belong to many orgs.
@@ -101,13 +160,20 @@ model Membership {
   id             String       @id @default(cuid())
   userId         String
   organizationId String
-  role           Role         @default(ADMIN)
+  roleId         String
+  /// Revoking access without deleting the row preserves audit history.
+  isActive       Boolean      @default(true)
   createdAt      DateTime     @default(now())
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  updatedAt      DateTime     @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  /// Restrict: a role that is still assigned to somebody cannot be deleted.
+  role         Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
 
   @@unique([userId, organizationId])
   @@index([organizationId])
+  @@index([roleId])
 }
 
 // ---------------------------------------------------------------------------

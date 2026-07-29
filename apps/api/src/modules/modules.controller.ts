@@ -3,14 +3,14 @@ import { enableModuleSchema, type EnableModuleDto } from '@mentivax/core';
 import { ZodBody } from '../common/zod-body.pipe';
 import { Tenant } from '../tenant/tenant.decorator';
 import type { TenantContext } from '../tenant/tenant.types';
+import { RequirePermissions } from '../auth/auth.decorators';
 import { ModulesService } from './modules.service';
 
 /**
  * Module marketplace + entitlement management for the current organization.
  *
- * NOTE: enable/disable are platform/owner-admin actions. Auth is stubbed in
- * this scaffold, so they are currently open — gate them with a role check
- * (OWNER / platform-admin) when real auth lands.
+ * Enabling and disabling affects what the school is billed for, so both are
+ * gated on `modules:manage` — held only by the Owner role by default.
  */
 @Controller('modules')
 export class ModulesController {
@@ -18,25 +18,28 @@ export class ModulesController {
 
   @Get()
   catalog(@Tenant() t: TenantContext) {
-    return this.service.catalog(t);
+    return this.service.catalog(t.organizationId);
   }
 
+  /** Unguarded: every client reads this on boot to build its navigation. */
   @Get('enabled')
   enabled(@Tenant() t: TenantContext) {
     return { modules: this.service.enabled(t) };
   }
 
   @Post(':key/enable')
+  @RequirePermissions('modules:manage')
   enable(
     @Tenant() t: TenantContext,
     @Param('key') key: string,
     @Body(new ZodBody(enableModuleSchema)) dto: EnableModuleDto,
   ) {
-    return this.service.enable(t, key, dto);
+    return this.service.enable(t.organizationId, key, dto);
   }
 
   @Post(':key/disable')
+  @RequirePermissions('modules:manage')
   disable(@Tenant() t: TenantContext, @Param('key') key: string) {
-    return this.service.disable(t, key);
+    return this.service.disable(t.organizationId, key);
   }
 }
