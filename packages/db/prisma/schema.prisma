@@ -48,6 +48,20 @@ model Organization {
   modules       OrganizationModule[]
   transportRoutes TransportRoute[]
   transportStops  TransportStop[]
+  transportSetting TransportSetting?
+}
+
+/// Org-wide transport fare settings: whether fares are fixed per stop/landmark
+/// or derived from distance (₹/km), and the per-km rates used in distance mode.
+model TransportSetting {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  /// "STOP" (fixed per landmark) or "DISTANCE" (distance × rate).
+  fareBasis      String       @default("STOP")
+  /// Rates in paise per km (used when fareBasis = DISTANCE).
+  ratePerKmBoth  Int          @default(0)
+  ratePerKmOne   Int          @default(0)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 // ---------------------------------------------------------------------------

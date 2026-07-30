@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { paiseToRupees, rupeesToPaise, type FeePeriod, type PricingMode } from '@mentivax/core';
+import { formatMoney, paiseToRupees, rupeesToPaise, type FeePeriod, type PricingMode } from '@mentivax/core';
 import type { FeeType, LandmarkFare, Student, TransportRoute } from '@mentivax/api-client';
 import { Icon } from '../components/Icon';
 import { StudentPicker } from '../components/StudentPicker';
@@ -772,33 +772,51 @@ function VanStudentMapping() {
   );
 }
 
-// 4 ─ Transport fee structure (per-landmark fares) ──────────────────────────
+// 4 ─ Transport fee structure (per-landmark, by stop or by distance) ────────
 function TransportFees() {
   const { api, routes, setRoutes, guard, error } = useRoutes();
+  const toast = useToast();
   const [vanId, setVanId] = useState('');
   useEffect(() => {
     if (routes.length && !routes.some((r) => r.id === vanId)) setVanId(routes[0]!.id);
   }, [routes, vanId]);
 
-  const setLmFare = (
-    stopId: string,
-    lmIdx: number,
-    field: 'bothWayFare' | 'oneWayFare',
-    rupees: string,
-  ) =>
+  // Org-wide fee basis + per-km rates (rupees in local state).
+  const settingsA = useAsync(() => api.transport.settings.get(), []);
+  const [basis, setBasis] = useState<'STOP' | 'DISTANCE'>('STOP');
+  const [rateBoth, setRateBoth] = useState(0);
+  const [rateOne, setRateOne] = useState(0);
+  useEffect(() => {
+    if (!settingsA.data) return;
+    setBasis(settingsA.data.fareBasis);
+    setRateBoth(paiseToRupees(settingsA.data.ratePerKmBoth));
+    setRateOne(paiseToRupees(settingsA.data.ratePerKmOne));
+  }, [settingsA.data]);
+
+  const saveSettings = (next: { basis?: 'STOP' | 'DISTANCE'; rateBoth?: number; rateOne?: number }) => {
+    api.transport.settings
+      .update({
+        fareBasis: next.basis ?? basis,
+        ratePerKmBoth: rupeesToPaise(next.rateBoth ?? rateBoth),
+        ratePerKmOne: rupeesToPaise(next.rateOne ?? rateOne),
+      })
+      .catch((e) => toast(e instanceof Error ? e.message : 'Could not save settings'));
+  };
+
+  const patchLandmark = (stopId: string, lmIdx: number, p: Partial<LandmarkFare>) =>
     setRoutes((rs) =>
       rs.map((r) => ({
         ...r,
         stops: r.stops.map((s) =>
-          s.id === stopId
-            ? { ...s, landmarks: s.landmarks.map((l, i) => (i === lmIdx ? { ...l, [field]: rupeesToPaise(Number(rupees) || 0) } : l)) }
-            : s,
+          s.id === stopId ? { ...s, landmarks: s.landmarks.map((l, i) => (i === lmIdx ? { ...l, ...p } : l)) } : s,
         ),
       })),
     );
-
   const saveStopFares = (stopId: string, landmarks: LandmarkFare[]) =>
     guard(() => api.transport.stops.update(stopId, { landmarks }));
+
+  const byDistance = basis === 'DISTANCE';
+  const calc = (km: number | null | undefined, ratePaise: number) => Math.round((km ?? 0) * ratePaise);
 
   return (
     <>
@@ -806,7 +824,7 @@ function TransportFees() {
         <div>
           <h4>Transport fee structure</h4>
           <div className="ph" style={{ margin: 0 }}>
-            Both-way and one-way fare per <b>landmark</b> (₹). One-way applies to morning/evening-only students.
+            Fare per <b>landmark</b> (₹) — set a fixed fare per stop, or derive it from distance.
           </div>
         </div>
         <div className="sp" style={{ flex: 1 }} />
@@ -816,6 +834,50 @@ function TransportFees() {
               <option key={r.id} value={r.id}>{r.name} · {r.vehicleNumber}</option>
             ))}
           </select>
+        )}
+      </div>
+
+      {/* Fee basis (applies to all vans) */}
+      <div className="panel" style={{ display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div className="fld">
+          <label>Fee basis</label>
+          <select
+            value={basis}
+            onChange={(e) => {
+              const b = e.target.value as 'STOP' | 'DISTANCE';
+              setBasis(b);
+              saveSettings({ basis: b });
+            }}
+          >
+            <option value="STOP">By stop — fixed fare per landmark</option>
+            <option value="DISTANCE">By distance — ₹/km × distance</option>
+          </select>
+        </div>
+        {byDistance && (
+          <>
+            <div className="fld">
+              <label>Both-way rate (₹ / km)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="0"
+                value={rateBoth || ''}
+                onChange={(e) => setRateBoth(Number(e.target.value) || 0)}
+                onBlur={() => saveSettings({})}
+              />
+            </div>
+            <div className="fld">
+              <label>One-way rate (₹ / km)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="0"
+                value={rateOne || ''}
+                onChange={(e) => setRateOne(Number(e.target.value) || 0)}
+                onBlur={() => saveSettings({})}
+              />
+            </div>
+          </>
         )}
       </div>
 
@@ -838,6 +900,7 @@ function TransportFees() {
                 <tr>
                   <th>Stop</th>
                   <th>Landmark</th>
+                  {byDistance && <th className="num">Distance (km)</th>}
                   <th className="num">Both-way (₹)</th>
                   <th className="num">One-way (₹)</th>
                 </tr>
@@ -848,41 +911,62 @@ function TransportFees() {
                     ? [
                         <tr key={stop.id}>
                           <td><b style={{ fontWeight: 600 }}>{stop.name}</b></td>
-                          <td colSpan={3} className="muted">Add landmarks under Stop details.</td>
+                          <td colSpan={byDistance ? 4 : 3} className="muted">Add landmarks under Stop details.</td>
                         </tr>,
                       ]
                     : stop.landmarks.map((lm, i) => (
                         <tr key={`${stop.id}-${i}`}>
                           <td>{i === 0 ? <b style={{ fontWeight: 600 }}>{stop.name}</b> : ''}</td>
                           <td>{lm.name || <span className="muted">Unnamed</span>}</td>
-                          <td className="num">
-                            <input
-                              className="fs-fare"
-                              type="number"
-                              min={0}
-                              placeholder="0"
-                              value={paiseToRupees(lm.bothWayFare) || ''}
-                              onChange={(e) => setLmFare(stop.id, i, 'bothWayFare', e.target.value)}
-                              onBlur={() => saveStopFares(stop.id, stop.landmarks)}
-                            />
-                          </td>
-                          <td className="num">
-                            <input
-                              className="fs-fare"
-                              type="number"
-                              min={0}
-                              placeholder="0"
-                              value={paiseToRupees(lm.oneWayFare) || ''}
-                              onChange={(e) => setLmFare(stop.id, i, 'oneWayFare', e.target.value)}
-                              onBlur={() => saveStopFares(stop.id, stop.landmarks)}
-                            />
-                          </td>
+                          {byDistance ? (
+                            <>
+                              <td className="num">
+                                <input
+                                  className="fs-fare"
+                                  type="number"
+                                  min={0}
+                                  step={0.1}
+                                  placeholder="0"
+                                  value={lm.distanceKm || ''}
+                                  onChange={(e) => patchLandmark(stop.id, i, { distanceKm: Number(e.target.value) || 0 })}
+                                  onBlur={() => saveStopFares(stop.id, stop.landmarks)}
+                                />
+                              </td>
+                              <td className="num">{formatMoney(calc(lm.distanceKm, rupeesToPaise(rateBoth)))}</td>
+                              <td className="num">{formatMoney(calc(lm.distanceKm, rupeesToPaise(rateOne)))}</td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="num">
+                                <input
+                                  className="fs-fare"
+                                  type="number"
+                                  min={0}
+                                  placeholder="0"
+                                  value={paiseToRupees(lm.bothWayFare) || ''}
+                                  onChange={(e) => patchLandmark(stop.id, i, { bothWayFare: rupeesToPaise(Number(e.target.value) || 0) })}
+                                  onBlur={() => saveStopFares(stop.id, stop.landmarks)}
+                                />
+                              </td>
+                              <td className="num">
+                                <input
+                                  className="fs-fare"
+                                  type="number"
+                                  min={0}
+                                  placeholder="0"
+                                  value={paiseToRupees(lm.oneWayFare) || ''}
+                                  onChange={(e) => patchLandmark(stop.id, i, { oneWayFare: rupeesToPaise(Number(e.target.value) || 0) })}
+                                  onBlur={() => saveStopFares(stop.id, stop.landmarks)}
+                                />
+                              </td>
+                            </>
+                          )}
                         </tr>
                       )),
                 )}
                 {route.stops.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="muted" style={{ padding: 14 }}>No stops on this van.</td>
+                    <td colSpan={byDistance ? 5 : 4} className="muted" style={{ padding: 14 }}>No stops on this van.</td>
                   </tr>
                 )}
               </tbody>

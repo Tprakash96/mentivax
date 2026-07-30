@@ -3,11 +3,13 @@ import {
   createRouteSchema,
   createStopSchema,
   saveStopFaresSchema,
+  transportSettingsSchema,
   updateRouteSchema,
   updateStopSchema,
   type CreateRouteDto,
   type CreateStopDto,
   type SaveStopFaresDto,
+  type TransportSettingsDto,
   type UpdateRouteDto,
   type UpdateStopDto,
 } from '@mentivax/core';
@@ -29,6 +31,21 @@ export class TransportController {
   @RequirePermissions('transport:read')
   listRoutes(@Tenant() t: TenantContext) {
     return this.service.listRoutes(t);
+  }
+
+  @Get('settings')
+  @RequirePermissions('transport:read')
+  getSettings(@Tenant() t: TenantContext) {
+    return this.service.getSettings(t);
+  }
+
+  @Put('settings')
+  @RequirePermissions('transport:write')
+  saveSettings(
+    @Tenant() t: TenantContext,
+    @Body(new ZodBody(transportSettingsSchema)) dto: TransportSettingsDto,
+  ) {
+    return this.service.saveSettings(t, dto);
   }
 
   @Post('routes')

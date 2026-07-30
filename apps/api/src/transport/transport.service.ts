@@ -3,8 +3,10 @@ import { Prisma } from '@mentivax/db';
 import type {
   CreateRouteDto,
   CreateStopDto,
+  FareBasis,
   LandmarkFare,
   SaveStopFaresDto,
+  TransportSettingsDto,
   UpdateRouteDto,
   UpdateStopDto,
 } from '@mentivax/core';
@@ -159,6 +161,32 @@ export class TransportService {
       ),
     );
     return this.listRoutes(t);
+  }
+
+  /** Org-wide transport fare settings (defaults to STOP basis with zero rates). */
+  async getSettings(t: TenantContext): Promise<TransportSettingsDto> {
+    const s = await this.prisma.transportSetting.findUnique({
+      where: { organizationId: t.organizationId },
+    });
+    return {
+      fareBasis: (s?.fareBasis as FareBasis) ?? 'STOP',
+      ratePerKmBoth: s?.ratePerKmBoth ?? 0,
+      ratePerKmOne: s?.ratePerKmOne ?? 0,
+    };
+  }
+
+  async saveSettings(t: TenantContext, dto: TransportSettingsDto): Promise<TransportSettingsDto> {
+    const data = {
+      fareBasis: dto.fareBasis,
+      ratePerKmBoth: dto.ratePerKmBoth,
+      ratePerKmOne: dto.ratePerKmOne,
+    };
+    const s = await this.prisma.transportSetting.upsert({
+      where: { organizationId: t.organizationId },
+      create: { organizationId: t.organizationId, ...data },
+      update: data,
+    });
+    return { fareBasis: s.fareBasis as FareBasis, ratePerKmBoth: s.ratePerKmBoth, ratePerKmOne: s.ratePerKmOne };
   }
 
   private async nextRouteRank(t: TenantContext): Promise<number> {

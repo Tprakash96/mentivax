@@ -22,6 +22,7 @@ import type {
   GenerateInvoicesDto,
   PreviewBatchDto,
   SaveStopFaresDto,
+  TransportSettingsDto,
   UpdateClassDto,
   UpdateFeeStructureDto,
   UpdateFeeTypeDto,
@@ -60,6 +61,7 @@ import type {
   SchoolClass,
   Student,
   TransportRoute,
+  TransportSettings,
 } from './types';
 
 export * from './types';
@@ -285,6 +287,11 @@ export function createClient(opts: ClientOptions) {
         remove: (id: string) => request<TransportRoute[]>('DELETE', `/transport/stops/${id}`),
         saveFares: (dto: SaveStopFaresDto) =>
           request<TransportRoute[]>('PUT', '/transport/stops/fares', dto),
+      },
+      settings: {
+        get: () => request<TransportSettings>('GET', '/transport/settings'),
+        update: (dto: TransportSettingsDto) =>
+          request<TransportSettings>('PUT', '/transport/settings', dto),
       },
     },
     financialYears: {

@@ -95,8 +95,22 @@ export const landmarkFareSchema = z.object({
   name: z.string().min(1).max(120),
   bothWayFare: z.number().int().nonnegative().default(0),
   oneWayFare: z.number().int().nonnegative().default(0),
+  /** Distance from school (km) — used when transport fares are distance-based. */
+  distanceKm: z.number().nonnegative().nullish(),
 });
 export type LandmarkFareDto = z.infer<typeof landmarkFareSchema>;
+
+/** Org-wide transport fare basis. */
+export const fareBasis = z.enum(['STOP', 'DISTANCE']);
+export type FareBasis = z.infer<typeof fareBasis>;
+
+/** Update org-wide transport settings (basis + per-km rates in paise). */
+export const transportSettingsSchema = z.object({
+  fareBasis,
+  ratePerKmBoth: z.number().int().nonnegative().default(0),
+  ratePerKmOne: z.number().int().nonnegative().default(0),
+});
+export type TransportSettingsDto = z.infer<typeof transportSettingsSchema>;
 
 export const createStopSchema = z.object({
   routeId: z.string().min(1),

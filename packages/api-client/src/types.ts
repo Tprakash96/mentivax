@@ -4,6 +4,7 @@
  */
 import type {
   DiscountType,
+  FareBasis,
   FeePeriod,
   InvoiceStatus,
   LandmarkFare,
@@ -15,6 +16,13 @@ import type {
 } from '@mentivax/core';
 
 export type { LandmarkFare };
+
+/** Org-wide transport fare settings (basis + per-km rates in paise). */
+export interface TransportSettings {
+  fareBasis: FareBasis;
+  ratePerKmBoth: number;
+  ratePerKmOne: number;
+}
 
 /** A catalog module annotated with the current org's entitlement state. */
 export interface ModuleView extends ModuleDef {

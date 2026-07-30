@@ -30,6 +30,8 @@ export interface LandmarkFare {
   name: string;
   bothWayFare: number;
   oneWayFare: number;
+  /** Distance from school (km) — used when transport fares are distance-based. */
+  distanceKm?: number | null;
 }
 
 /** A transport stop's fares (paise). One-way is charged for morning/evening only. */

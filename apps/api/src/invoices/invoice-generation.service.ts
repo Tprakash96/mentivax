@@ -104,13 +104,26 @@ export class InvoiceGenerationService {
     const lm = student.transportLandmark
       ? landmarks.find((l) => l.name === student.transportLandmark)
       : undefined;
+
+    // Distance-based fares (org setting): fare = distance (km) × per-km rate.
+    const settings = await this.prisma.transportSetting.findUnique({
+      where: { organizationId: t.organizationId },
+    });
+    let bothWayFare = lm?.bothWayFare ?? stop.bothWayFare;
+    let oneWayFare = lm?.oneWayFare ?? stop.oneWayFare;
+    if (settings?.fareBasis === 'DISTANCE') {
+      const km = lm?.distanceKm ?? 0;
+      bothWayFare = Math.round(km * settings.ratePerKmBoth);
+      oneWayFare = Math.round(km * settings.ratePerKmOne);
+    }
+
     return {
       fare: {
         stopId: stop.id,
         stopName: stop.name,
         routeName: stop.route.name,
-        bothWayFare: lm?.bothWayFare ?? stop.bothWayFare,
-        oneWayFare: lm?.oneWayFare ?? stop.oneWayFare,
+        bothWayFare,
+        oneWayFare,
         landmarkName: lm?.name,
       },
       shift: student.transportShift,
