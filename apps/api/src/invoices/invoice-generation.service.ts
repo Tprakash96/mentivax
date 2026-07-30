@@ -11,6 +11,7 @@ import {
   type DraftLine,
   type FeeScope,
   type GenerateInvoicesDto,
+  type LandmarkFare,
   type TransportBillingInput,
   type TransportShift,
 } from '@mentivax/core';
@@ -24,6 +25,7 @@ type StudentRow = {
   isNewAdmission: boolean;
   transportStopId: string | null;
   transportShift: TransportShift | null;
+  transportLandmark: string | null;
   feeExempt: boolean;
   discountType: DiscountType;
   discountValue: number;
@@ -35,6 +37,7 @@ const STUDENT_SELECT = {
   isNewAdmission: true,
   transportStopId: true,
   transportShift: true,
+  transportLandmark: true,
   feeExempt: true,
   discountType: true,
   discountValue: true,
@@ -96,13 +99,32 @@ export class InvoiceGenerationService {
       include: { route: { select: { name: true } } },
     });
     if (!stop) return undefined;
+    // Transport is billed per landmark: use the student's landmark fare, else the stop fare.
+    const landmarks = (Array.isArray(stop.landmarks) ? stop.landmarks : []) as unknown as LandmarkFare[];
+    const lm = student.transportLandmark
+      ? landmarks.find((l) => l.name === student.transportLandmark)
+      : undefined;
+
+    // Distance-based fares (org setting): fare = distance (km) × per-km rate.
+    const settings = await this.prisma.transportSetting.findUnique({
+      where: { organizationId: t.organizationId },
+    });
+    let bothWayFare = lm?.bothWayFare ?? stop.bothWayFare;
+    let oneWayFare = lm?.oneWayFare ?? stop.oneWayFare;
+    if (settings?.fareBasis === 'DISTANCE') {
+      const km = lm?.distanceKm ?? 0;
+      bothWayFare = Math.round(km * settings.ratePerKmBoth);
+      oneWayFare = Math.round(km * settings.ratePerKmOne);
+    }
+
     return {
       fare: {
         stopId: stop.id,
         stopName: stop.name,
         routeName: stop.route.name,
-        bothWayFare: stop.bothWayFare,
-        oneWayFare: stop.oneWayFare,
+        bothWayFare,
+        oneWayFare,
+        landmarkName: lm?.name,
       },
       shift: student.transportShift,
     };

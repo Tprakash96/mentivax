@@ -48,6 +48,20 @@ model Organization {
   modules       OrganizationModule[]
   transportRoutes TransportRoute[]
   transportStops  TransportStop[]
+  transportSetting TransportSetting?
+}
+
+/// Org-wide transport fare settings: whether fares are fixed per stop/landmark
+/// or derived from distance (₹/km), and the per-km rates used in distance mode.
+model TransportSetting {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  /// "STOP" (fixed per landmark) or "DISTANCE" (distance × rate).
+  fareBasis      String       @default("STOP")
+  /// Rates in paise per km (used when fareBasis = DISTANCE).
+  ratePerKmBoth  Int          @default(0)
+  ratePerKmOne   Int          @default(0)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 // ---------------------------------------------------------------------------
@@ -300,6 +314,8 @@ model Student {
   /// Transport assignment (optional). A student with a stop is billed transport.
   transportStopId String?
   transportShift  TransportShift?
+  /// Which pickup landmark within the stop the student boards at.
+  transportLandmark String?
   /// Fee adjustments (persistent, honoured on every invoice generation).
   /// Exempt students are skipped entirely; discount applies to the whole invoice.
   feeExempt      Boolean      @default(false)
@@ -364,6 +380,12 @@ model TransportStop {
   bothWayFare    Int            @default(0)
   oneWayFare     Int            @default(0)
   rank           Int            @default(0)
+  /// Optional morning pickup / evening drop times ("HH:MM").
+  pickupTime     String?
+  dropTime       String?
+  /// Pickup landmarks within this stop, each with its own fare:
+  /// [{ name, bothWayFare, oneWayFare }] (paise). Transport is billed per landmark.
+  landmarks      Json           @default("[]")
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   route          TransportRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
 

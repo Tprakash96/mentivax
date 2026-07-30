@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { paiseToRupees, rupeesToPaise, type FeePeriod, type PricingMode } from '@mentivax/core';
-import type { FeeType, Student, TransportRoute } from '@mentivax/api-client';
+import { formatMoney, paiseToRupees, rupeesToPaise, type FeePeriod, type PricingMode } from '@mentivax/core';
+import type { FeeType, LandmarkFare, Student, TransportRoute } from '@mentivax/api-client';
 import { Icon } from '../components/Icon';
 import { StudentPicker } from '../components/StudentPicker';
 import { UnsavedGuard } from '../components/UnsavedGuard';
@@ -278,14 +278,17 @@ function useRoutes() {
 function VanDetails() {
   const { api, routes, setRoutes, guard, error } = useRoutes();
   const [adding, setAdding] = useState(false);
-  const [rName, setRName] = useState('');
+  const [rVid, setRVid] = useState('');
   const [rVeh, setRVeh] = useState('');
   const [rType, setRType] = useState<'BUS' | 'VAN'>('VAN');
 
   const add = async () => {
-    if (!rName.trim() || !rVeh.trim()) return setAdding(false);
-    await guard(() => api.transport.routes.create({ name: rName.trim(), vehicleNumber: rVeh.trim(), vehicleType: rType }));
-    setRName('');
+    const id = rVid.trim();
+    const num = rVeh.trim();
+    if (!id || !num) return setAdding(false);
+    // "Vehicle ID" is stored as the route name; vehicle number is the reg. plate.
+    await guard(() => api.transport.routes.create({ name: id, vehicleNumber: num, vehicleType: rType }));
+    setRVid('');
     setRVeh('');
     setRType('VAN');
     setAdding(false);
@@ -309,12 +312,12 @@ function VanDetails() {
       {adding && (
         <div className="panel" style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div className="fld">
-            <label>Van / route name</label>
-            <input value={rName} autoFocus placeholder="e.g. North Route" onChange={(e) => setRName(e.target.value)} />
+            <label>Vehicle ID</label>
+            <input value={rVid} autoFocus placeholder="e.g. VAN-01" onChange={(e) => setRVid(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
           </div>
           <div className="fld">
             <label>Vehicle number</label>
-            <input value={rVeh} placeholder="e.g. TN-01-AB-1234" onChange={(e) => setRVeh(e.target.value)} />
+            <input value={rVeh} placeholder="e.g. TN-01-AB-1234" onChange={(e) => setRVeh(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
           </div>
           <div className="fld">
             <label>Type</label>
@@ -324,28 +327,34 @@ function VanDetails() {
             </select>
           </div>
           <button className="btn grn" onClick={add}>Add</button>
-          <button className="btn" onClick={() => { setAdding(false); setRName(''); setRVeh(''); }}>Cancel</button>
+          <button className="btn" onClick={() => { setAdding(false); setRVid(''); setRVeh(''); }}>Cancel</button>
         </div>
       )}
 
       <div className="card-t" style={{ overflowX: 'auto' }}>
-        <table>
+        <table className="van-tbl">
           <thead>
             <tr>
-              <th>Van / route</th>
+              <th style={{ width: 46 }} />
+              <th style={{ width: 120 }}>Vehicle ID</th>
               <th>Vehicle number</th>
-              <th>Type</th>
-              <th className="num">Stops</th>
-              <th className="num" />
+              <th style={{ width: 130 }}>Type</th>
+              <th className="num" style={{ width: 90 }}>Stops</th>
+              <th className="num" style={{ width: 56 }} />
             </tr>
           </thead>
           <tbody>
             {routes.map((r) => (
               <tr key={r.id}>
                 <td>
+                  <span className={`van-ic${r.vehicleType === 'BUS' ? ' bus' : ''}`}>
+                    <Icon name="bus" size={16} />
+                  </span>
+                </td>
+                <td>
                   <input
-                    className="fs-name"
-                    style={{ maxWidth: 240 }}
+                    className="cell-input"
+                    style={{ maxWidth: 96 }}
                     value={r.name}
                     onChange={(e) => setRoutes((rs) => rs.map((x) => (x.id === r.id ? { ...x, name: e.target.value } : x)))}
                     onBlur={() => guard(() => api.transport.routes.update(r.id, { name: r.name.trim() }))}
@@ -353,8 +362,8 @@ function VanDetails() {
                 </td>
                 <td>
                   <input
-                    className="fs-name"
-                    style={{ maxWidth: 180 }}
+                    className="cell-input"
+                    style={{ maxWidth: 220 }}
                     value={r.vehicleNumber}
                     onChange={(e) => setRoutes((rs) => rs.map((x) => (x.id === r.id ? { ...x, vehicleNumber: e.target.value } : x)))}
                     onBlur={() => guard(() => api.transport.routes.update(r.id, { vehicleNumber: r.vehicleNumber.trim() }))}
@@ -370,7 +379,9 @@ function VanDetails() {
                     <option value="BUS">Bus</option>
                   </select>
                 </td>
-                <td className="num">{r.stops.length}</td>
+                <td className="num">
+                  <span className="count-pill">{r.stops.length} {r.stops.length === 1 ? 'stop' : 'stops'}</span>
+                </td>
                 <td className="num">
                   <button className="fs-del" title="Delete van" onClick={() => guard(() => api.transport.routes.remove(r.id))}>
                     <Icon name="trash" size={15} />
@@ -380,7 +391,7 @@ function VanDetails() {
             ))}
             {routes.length === 0 && (
               <tr>
-                <td colSpan={5} className="muted" style={{ padding: 18 }}>No vans yet — add your first van above.</td>
+                <td colSpan={6} className="muted" style={{ padding: 22, textAlign: 'center' }}>No vans yet — add your first van above.</td>
               </tr>
             )}
           </tbody>
@@ -391,10 +402,29 @@ function VanDetails() {
   );
 }
 
-// 2 ─ Stop details (boarding points per van) ────────────────────────────────
+// 2 ─ Stop details (name · times · landmark · order · fares, per van) ────────
 function StopDetails() {
   const { api, routes, setRoutes, guard, error } = useRoutes();
+  const students = useAsync(() => api.students.list({}), []);
   const [stopName, setStopName] = useState<Record<string, string>>({});
+  const [vanId, setVanId] = useState('');
+  useEffect(() => {
+    if (routes.length && !routes.some((r) => r.id === vanId)) setVanId(routes[0]!.id);
+  }, [routes, vanId]);
+
+  const patchStop = (stopId: string, p: Partial<TransportRoute['stops'][number]>) =>
+    setRoutes((rs) => rs.map((r) => ({ ...r, stops: r.stops.map((s) => (s.id === stopId ? { ...s, ...p } : s)) })));
+
+  const saveLandmarks = (stopId: string, lms: LandmarkFare[]) =>
+    guard(() =>
+      api.transport.stops.update(stopId, {
+        landmarks: lms.map((l) => ({ ...l, name: l.name.trim() })).filter((l) => l.name),
+      }),
+    );
+
+  // How many students board at a given stop + landmark name.
+  const lmCount = (stopId: string, name: string) =>
+    (students.data ?? []).filter((s) => s.transportStopId === stopId && s.transportLandmark === name.trim()).length;
 
   const addStop = async (routeId: string) => {
     const name = (stopName[routeId] ?? '').trim();
@@ -403,41 +433,166 @@ function StopDetails() {
     setStopName((s) => ({ ...s, [routeId]: '' }));
   };
 
+  const moveStop = async (route: TransportRoute, idx: number, dir: -1 | 1) => {
+    const j = idx + dir;
+    const a = route.stops[idx];
+    const b = route.stops[j];
+    if (!a || !b) return;
+    await api.transport.stops.update(a.id, { rank: b.rank });
+    await guard(() => api.transport.stops.update(b.id, { rank: a.rank }));
+  };
+
   return (
     <>
       <div className="panel fs-head">
         <div>
           <h4>Stop details</h4>
-          <div className="ph" style={{ margin: 0 }}>The boarding points on each van’s route.</div>
+          <div className="ph" style={{ margin: 0 }}>
+            Boarding points per van — pickup / drop time, landmark, and order.
+          </div>
         </div>
+        <div className="sp" style={{ flex: 1 }} />
+        {routes.length > 0 && (
+          <select className="fs-sel van-select" value={vanId} onChange={(e) => setVanId(e.target.value)}>
+            {routes.map((r) => (
+              <option key={r.id} value={r.id}>{r.name} · {r.vehicleNumber}</option>
+            ))}
+          </select>
+        )}
       </div>
 
-      {routes.map((route) => (
+      {routes.filter((r) => r.id === vanId).map((route) => (
         <div key={route.id} className="panel" style={{ marginBottom: 14 }}>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
-            <Icon name="bus" size={18} />
-            <b>{route.name}</b>
-            <span className="cls">{route.vehicleNumber}</span>
-          </div>
-          <div style={{ paddingLeft: 28 }}>
-            {route.stops.map((stop) => (
-              <div key={stop.id} className="stoprow">
-                <input
-                  className="fs-name"
-                  style={{ maxWidth: 300 }}
-                  value={stop.name}
-                  onChange={(e) => setRoutes((rs) => rs.map((r) => (r.id === route.id ? { ...r, stops: r.stops.map((s) => (s.id === stop.id ? { ...s, name: e.target.value } : s)) } : r)))}
-                  onBlur={() => guard(() => api.transport.stops.update(stop.id, { name: stop.name.trim() }))}
-                />
-                <button className="fs-del" title="Delete stop" onClick={() => guard(() => api.transport.stops.remove(stop.id))}>
-                  <Icon name="trash" size={14} />
-                </button>
+          <div className="van-banner">
+            <span className={`van-ic${route.vehicleType === 'BUS' ? ' bus' : ''}`}>
+              <Icon name="bus" size={17} />
+            </span>
+            <div>
+              <div className="van-banner-num">{route.vehicleNumber}</div>
+              <div className="van-banner-sub">
+                Vehicle ID {route.name} · {route.vehicleType === 'VAN' ? 'Van' : 'Bus'}
               </div>
-            ))}
-            <div className="stoprow">
+            </div>
+          </div>
+          <div className="card-t" style={{ overflowX: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: 56 }}>Order</th>
+                  <th>Stop</th>
+                  <th>Pickup</th>
+                  <th>Drop</th>
+                  <th>Landmarks (₹ set under Fee structure)</th>
+                  <th className="num" />
+                </tr>
+              </thead>
+              <tbody>
+                {route.stops.map((stop, idx) => (
+                  <tr key={stop.id}>
+                    <td>
+                      <div className="stop-ord">
+                        <button disabled={idx === 0} title="Move up" onClick={() => moveStop(route, idx, -1)}>
+                          <Icon name="chevron" size={13} style={{ transform: 'rotate(180deg)' }} />
+                        </button>
+                        <button disabled={idx === route.stops.length - 1} title="Move down" onClick={() => moveStop(route, idx, 1)}>
+                          <Icon name="chevron" size={13} />
+                        </button>
+                      </div>
+                    </td>
+                    <td>
+                      <input
+                        className="fs-name"
+                        style={{ maxWidth: 200 }}
+                        value={stop.name}
+                        onChange={(e) => patchStop(stop.id, { name: e.target.value })}
+                        onBlur={() => guard(() => api.transport.stops.update(stop.id, { name: stop.name.trim() }))}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        className="fs-time"
+                        type="time"
+                        value={stop.pickupTime ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value || null;
+                          patchStop(stop.id, { pickupTime: v });
+                          guard(() => api.transport.stops.update(stop.id, { pickupTime: v }));
+                          e.currentTarget.blur();
+                        }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        className="fs-time"
+                        type="time"
+                        value={stop.dropTime ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value || null;
+                          patchStop(stop.id, { dropTime: v });
+                          guard(() => api.transport.stops.update(stop.id, { dropTime: v }));
+                          e.currentTarget.blur();
+                        }}
+                      />
+                    </td>
+                    <td>
+                      <div className="lm-list">
+                        {(stop.landmarks ?? []).map((lm, i) => (
+                          <div className="lm-item" key={i}>
+                            <input
+                              className="fs-name"
+                              style={{ maxWidth: 200 }}
+                              placeholder="e.g. Vinayagar temple"
+                              value={lm.name}
+                              onChange={(e) =>
+                                patchStop(stop.id, {
+                                  landmarks: (stop.landmarks ?? []).map((x, xi) => (xi === i ? { ...x, name: e.target.value } : x)),
+                                })
+                              }
+                              onBlur={() => saveLandmarks(stop.id, stop.landmarks ?? [])}
+                            />
+                            {lm.name.trim() !== '' && (
+                              <span className="lm-count" title="Students at this landmark">
+                                <Icon name="users" size={11} />
+                                {lmCount(stop.id, lm.name)}
+                              </span>
+                            )}
+                            <button
+                              className="lm-x"
+                              title="Remove landmark"
+                              onClick={() => saveLandmarks(stop.id, (stop.landmarks ?? []).filter((_, xi) => xi !== i))}
+                            >
+                              <Icon name="x" size={12} />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          className="lm-add"
+                          onClick={() =>
+                            patchStop(stop.id, { landmarks: [...(stop.landmarks ?? []), { name: '', bothWayFare: 0, oneWayFare: 0 }] })
+                          }
+                        >
+                          <Icon name="plus" size={12} /> Landmark
+                        </button>
+                      </div>
+                    </td>
+                    <td className="num">
+                      <button className="fs-del" title="Delete stop" onClick={() => guard(() => api.transport.stops.remove(stop.id))}>
+                        <Icon name="trash" size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {route.stops.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="muted" style={{ padding: 14 }}>No stops yet — add one below.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            <div style={{ display: 'flex', gap: 8, padding: '10px 14px' }}>
               <input
                 className="fs-name"
-                style={{ maxWidth: 300 }}
+                style={{ maxWidth: 240 }}
                 placeholder="Add a stop…"
                 value={stopName[route.id] ?? ''}
                 onChange={(e) => setStopName((s) => ({ ...s, [route.id]: e.target.value }))}
@@ -480,15 +635,24 @@ function VanStudentMapping() {
   const [addStudentId, setAddStudentId] = useState('');
   const [addStopId, setAddStopId] = useState('');
   const [addShift, setAddShift] = useState<ShiftValue>('BOTH');
+  const [addLandmark, setAddLandmark] = useState('');
+  const [pickerKey, setPickerKey] = useState(0);
   useEffect(() => setAddStopId(van?.stops[0]?.id ?? ''), [vanId, van?.stops.length]);
+  useEffect(() => setAddLandmark(''), [addStopId]);
+  const selectedStop = van?.stops.find((s) => s.id === addStopId);
 
   const stopName = (id: string | null) => van?.stops.find((s) => s.id === id)?.name ?? '—';
 
   const assign = async () => {
     if (!addStudentId || !addStopId) return;
     try {
-      await api.students.assignTransport(addStudentId, { transportStopId: addStopId, transportShift: addShift });
+      await api.students.assignTransport(addStudentId, {
+        transportStopId: addStopId,
+        transportShift: addShift,
+        transportLandmark: addLandmark || null,
+      });
       setAddStudentId('');
+      setPickerKey((k) => k + 1); // remount the picker so its text field clears
       students.reload();
       toast('Student mapped to van');
     } catch (e) {
@@ -514,9 +678,9 @@ function VanStudentMapping() {
         </div>
         <div className="sp" style={{ flex: 1 }} />
         {routes.length > 0 && (
-          <select className="fs-sel" value={vanId} onChange={(e) => setVanId(e.target.value)}>
+          <select className="fs-sel van-select" value={vanId} onChange={(e) => setVanId(e.target.value)}>
             {routes.map((r) => (
-              <option key={r.id} value={r.id}>{r.name}</option>
+              <option key={r.id} value={r.id}>{r.name} · {r.vehicleNumber}</option>
             ))}
           </select>
         )}
@@ -527,7 +691,7 @@ function VanStudentMapping() {
           <div className="panel" style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div className="fld" style={{ flex: 1, minWidth: 220 }}>
               <label>Student</label>
-              <StudentPicker students={students.data ?? []} value={addStudentId} onChange={setAddStudentId} />
+              <StudentPicker key={pickerKey} students={students.data ?? []} value={addStudentId} onChange={setAddStudentId} />
             </div>
             <div className="fld">
               <label>Stop</label>
@@ -537,6 +701,17 @@ function VanStudentMapping() {
                 ))}
               </select>
             </div>
+            {(selectedStop?.landmarks?.length ?? 0) > 0 && (
+              <div className="fld">
+                <label>Landmark</label>
+                <select value={addLandmark} onChange={(e) => setAddLandmark(e.target.value)}>
+                  <option value="">— none —</option>
+                  {selectedStop!.landmarks.map((lm) => (
+                    <option key={lm.name} value={lm.name}>{lm.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="fld">
               <label>Shift</label>
               <select value={addShift} onChange={(e) => setAddShift(e.target.value as ShiftValue)}>
@@ -557,6 +732,7 @@ function VanStudentMapping() {
                   <th>Student</th>
                   <th>Class</th>
                   <th>Stop</th>
+                  <th>Landmark</th>
                   <th>Shift</th>
                   <th className="num" />
                 </tr>
@@ -567,6 +743,7 @@ function VanStudentMapping() {
                     <td><b style={{ fontWeight: 600 }}>{s.name}</b></td>
                     <td><span className="cls">{s.className}</span></td>
                     <td>{stopName(s.transportStopId ?? null)}</td>
+                    <td>{s.transportLandmark || <span className="muted">—</span>}</td>
                     <td>{SHIFTS.find((x) => x.value === s.transportShift)?.label ?? '—'}</td>
                     <td className="num">
                       <button className="fs-del" title="Remove from van" onClick={() => unassign(s)}>
@@ -577,7 +754,7 @@ function VanStudentMapping() {
                 ))}
                 {mapped.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="muted" style={{ padding: 18 }}>No students mapped to this van yet.</td>
+                    <td colSpan={6} className="muted" style={{ padding: 18 }}>No students mapped to this van yet.</td>
                   </tr>
                 )}
               </tbody>
@@ -595,101 +772,201 @@ function VanStudentMapping() {
   );
 }
 
-// 4 ─ Transport fee structure (per-stop fares) ──────────────────────────────
+// 4 ─ Transport fee structure (per-landmark, by stop or by distance) ────────
 function TransportFees() {
-  const { api, routes, setRoutes, error } = useRoutes();
+  const { api, routes, setRoutes, guard, error } = useRoutes();
   const toast = useToast();
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [vanId, setVanId] = useState('');
+  useEffect(() => {
+    if (routes.length && !routes.some((r) => r.id === vanId)) setVanId(routes[0]!.id);
+  }, [routes, vanId]);
 
-  const setFare = (routeId: string, stopId: string, field: 'bothWayFare' | 'oneWayFare', rupees: string) => {
+  // Org-wide fee basis + per-km rates (rupees in local state).
+  const settingsA = useAsync(() => api.transport.settings.get(), []);
+  const [basis, setBasis] = useState<'STOP' | 'DISTANCE'>('STOP');
+  const [rateBoth, setRateBoth] = useState(0);
+  const [rateOne, setRateOne] = useState(0);
+  useEffect(() => {
+    if (!settingsA.data) return;
+    setBasis(settingsA.data.fareBasis);
+    setRateBoth(paiseToRupees(settingsA.data.ratePerKmBoth));
+    setRateOne(paiseToRupees(settingsA.data.ratePerKmOne));
+  }, [settingsA.data]);
+
+  const saveSettings = (next: { basis?: 'STOP' | 'DISTANCE'; rateBoth?: number; rateOne?: number }) => {
+    api.transport.settings
+      .update({
+        fareBasis: next.basis ?? basis,
+        ratePerKmBoth: rupeesToPaise(next.rateBoth ?? rateBoth),
+        ratePerKmOne: rupeesToPaise(next.rateOne ?? rateOne),
+      })
+      .catch((e) => toast(e instanceof Error ? e.message : 'Could not save settings'));
+  };
+
+  const patchLandmark = (stopId: string, lmIdx: number, p: Partial<LandmarkFare>) =>
     setRoutes((rs) =>
-      rs.map((r) =>
-        r.id === routeId
-          ? { ...r, stops: r.stops.map((s) => (s.id === stopId ? { ...s, [field]: rupeesToPaise(Number(rupees) || 0) } : s)) }
-          : r,
-      ),
+      rs.map((r) => ({
+        ...r,
+        stops: r.stops.map((s) =>
+          s.id === stopId ? { ...s, landmarks: s.landmarks.map((l, i) => (i === lmIdx ? { ...l, ...p } : l)) } : s,
+        ),
+      })),
     );
-    setDirty(true);
-  };
+  const saveStopFares = (stopId: string, landmarks: LandmarkFare[]) =>
+    guard(() => api.transport.stops.update(stopId, { landmarks }));
 
-  const save = async () => {
-    setSaving(true);
-    try {
-      const fares = routes.flatMap((r) => r.stops.map((s) => ({ stopId: s.id, bothWayFare: s.bothWayFare, oneWayFare: s.oneWayFare })));
-      setRoutes(await api.transport.stops.saveFares({ fares }));
-      setDirty(false);
-      toast('Transport fares saved');
-    } catch (e) {
-      toast(e instanceof Error ? e.message : 'Save failed');
-      throw e;
-    } finally {
-      setSaving(false);
-    }
-  };
+  const byDistance = basis === 'DISTANCE';
+  const calc = (km: number | null | undefined, ratePaise: number) => Math.round((km ?? 0) * ratePaise);
 
   return (
     <>
-      <UnsavedGuard dirty={dirty} onSave={save} />
       <div className="panel fs-head">
         <div>
           <h4>Transport fee structure</h4>
           <div className="ph" style={{ margin: 0 }}>
-            Both-way and one-way fare per stop (₹). One-way applies to morning/evening-only students.
+            Fare per <b>landmark</b> (₹) — set a fixed fare per stop, or derive it from distance.
           </div>
         </div>
         <div className="sp" style={{ flex: 1 }} />
-        <button className="btn grn" disabled={saving} onClick={() => void save().catch(() => {})}>
-          <Icon name="save" size={15} />
-          {saving ? 'Saving…' : 'Save fares'}
-        </button>
+        {routes.length > 0 && (
+          <select className="fs-sel van-select" value={vanId} onChange={(e) => setVanId(e.target.value)}>
+            {routes.map((r) => (
+              <option key={r.id} value={r.id}>{r.name} · {r.vehicleNumber}</option>
+            ))}
+          </select>
+        )}
       </div>
 
-      {routes.map((route) => (
+      {/* Fee basis (applies to all vans) */}
+      <div className="panel" style={{ display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div className="fld">
+          <label>Fee basis</label>
+          <select
+            value={basis}
+            onChange={(e) => {
+              const b = e.target.value as 'STOP' | 'DISTANCE';
+              setBasis(b);
+              saveSettings({ basis: b });
+            }}
+          >
+            <option value="STOP">By stop — fixed fare per landmark</option>
+            <option value="DISTANCE">By distance — ₹/km × distance</option>
+          </select>
+        </div>
+        {byDistance && (
+          <>
+            <div className="fld">
+              <label>Both-way rate (₹ / km)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="0"
+                value={rateBoth || ''}
+                onChange={(e) => setRateBoth(Number(e.target.value) || 0)}
+                onBlur={() => saveSettings({})}
+              />
+            </div>
+            <div className="fld">
+              <label>One-way rate (₹ / km)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="0"
+                value={rateOne || ''}
+                onChange={(e) => setRateOne(Number(e.target.value) || 0)}
+                onBlur={() => saveSettings({})}
+              />
+            </div>
+          </>
+        )}
+      </div>
+
+      {routes.filter((r) => r.id === vanId).map((route) => (
         <div key={route.id} className="panel" style={{ marginBottom: 14 }}>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
-            <Icon name="bus" size={18} />
-            <b>{route.name}</b>
-            <span className="cls">{route.vehicleNumber}</span>
+          <div className="van-banner">
+            <span className={`van-ic${route.vehicleType === 'BUS' ? ' bus' : ''}`}>
+              <Icon name="bus" size={17} />
+            </span>
+            <div>
+              <div className="van-banner-num">{route.vehicleNumber}</div>
+              <div className="van-banner-sub">
+                Vehicle ID {route.name} · {route.vehicleType === 'VAN' ? 'Van' : 'Bus'}
+              </div>
+            </div>
           </div>
           <div className="card-t" style={{ overflowX: 'auto' }}>
             <table>
               <thead>
                 <tr>
                   <th>Stop</th>
+                  <th>Landmark</th>
+                  {byDistance && <th className="num">Distance (km)</th>}
                   <th className="num">Both-way (₹)</th>
                   <th className="num">One-way (₹)</th>
                 </tr>
               </thead>
               <tbody>
-                {route.stops.map((s) => (
-                  <tr key={s.id}>
-                    <td><b style={{ fontWeight: 600 }}>{s.name}</b></td>
-                    <td className="num">
-                      <input
-                        className="fs-fare"
-                        type="number"
-                        min={0}
-                        placeholder="0"
-                        value={paiseToRupees(s.bothWayFare) || ''}
-                        onChange={(e) => setFare(route.id, s.id, 'bothWayFare', e.target.value)}
-                      />
-                    </td>
-                    <td className="num">
-                      <input
-                        className="fs-fare"
-                        type="number"
-                        min={0}
-                        placeholder="0"
-                        value={paiseToRupees(s.oneWayFare) || ''}
-                        onChange={(e) => setFare(route.id, s.id, 'oneWayFare', e.target.value)}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                {route.stops.flatMap((stop) =>
+                  stop.landmarks.length === 0
+                    ? [
+                        <tr key={stop.id}>
+                          <td><b style={{ fontWeight: 600 }}>{stop.name}</b></td>
+                          <td colSpan={byDistance ? 4 : 3} className="muted">Add landmarks under Stop details.</td>
+                        </tr>,
+                      ]
+                    : stop.landmarks.map((lm, i) => (
+                        <tr key={`${stop.id}-${i}`}>
+                          <td>{i === 0 ? <b style={{ fontWeight: 600 }}>{stop.name}</b> : ''}</td>
+                          <td>{lm.name || <span className="muted">Unnamed</span>}</td>
+                          {byDistance ? (
+                            <>
+                              <td className="num">
+                                <input
+                                  className="fs-fare"
+                                  type="number"
+                                  min={0}
+                                  step={0.1}
+                                  placeholder="0"
+                                  value={lm.distanceKm || ''}
+                                  onChange={(e) => patchLandmark(stop.id, i, { distanceKm: Number(e.target.value) || 0 })}
+                                  onBlur={() => saveStopFares(stop.id, stop.landmarks)}
+                                />
+                              </td>
+                              <td className="num">{formatMoney(calc(lm.distanceKm, rupeesToPaise(rateBoth)))}</td>
+                              <td className="num">{formatMoney(calc(lm.distanceKm, rupeesToPaise(rateOne)))}</td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="num">
+                                <input
+                                  className="fs-fare"
+                                  type="number"
+                                  min={0}
+                                  placeholder="0"
+                                  value={paiseToRupees(lm.bothWayFare) || ''}
+                                  onChange={(e) => patchLandmark(stop.id, i, { bothWayFare: rupeesToPaise(Number(e.target.value) || 0) })}
+                                  onBlur={() => saveStopFares(stop.id, stop.landmarks)}
+                                />
+                              </td>
+                              <td className="num">
+                                <input
+                                  className="fs-fare"
+                                  type="number"
+                                  min={0}
+                                  placeholder="0"
+                                  value={paiseToRupees(lm.oneWayFare) || ''}
+                                  onChange={(e) => patchLandmark(stop.id, i, { oneWayFare: rupeesToPaise(Number(e.target.value) || 0) })}
+                                  onBlur={() => saveStopFares(stop.id, stop.landmarks)}
+                                />
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      )),
+                )}
                 {route.stops.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="muted" style={{ padding: 14 }}>No stops on this van.</td>
+                    <td colSpan={byDistance ? 5 : 4} className="muted" style={{ padding: 14 }}>No stops on this van.</td>
                   </tr>
                 )}
               </tbody>
