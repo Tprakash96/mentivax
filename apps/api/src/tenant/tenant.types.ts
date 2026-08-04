@@ -8,6 +8,8 @@ export interface TenantContext {
   /** The active academic year for the org (fees are year-scoped). */
   academicYearId: string;
   academicYearLabel: string;
+  /** ISO start date of the active year — drives monthly fee-period labels. */
+  academicYearStart: string;
   currency: string;
   /** Effective module keys this org can use (enabled + always-on core). */
   enabledModules: string[];

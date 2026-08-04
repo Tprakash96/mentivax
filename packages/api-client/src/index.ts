@@ -5,11 +5,23 @@
  *   const students = await api.students.list();
  */
 import type {
+  CreateAccountDto,
   CreateBatchDto,
+  CreateCategoryDto,
   CreateClassDto,
+  ConfirmDocumentDto,
+  CreateDiscountRuleDto,
+  CreateDocumentTypeDto,
+  UpdateDocumentTypeDto,
+  CreateEmployeeDto,
+  CreateHolidayDto,
+  CreateLeaveDto,
+  CreateSubjectDto,
+  PresignDocumentDto,
   CreateFeeTypeDto,
   CreateFinancialYearDto,
   CreateInvoiceDto,
+  CreateLedgerEntryDto,
   CreateMemberDto,
   CreateOrganizationDto,
   CreatePaymentDto,
@@ -17,32 +29,70 @@ import type {
   CreateRouteDto,
   CreateStopDto,
   CreateStudentDto,
+  CreateVendorDto,
+  DecideLeaveDto,
   EnableModuleDto,
+  ExpenseSettingsDto,
   FeeScope,
   GenerateInvoicesDto,
+  MarkExitDto,
+  PayStaffDto,
+  PayrollSettingsDto,
   PreviewBatchDto,
+  RecordRaiseDto,
   SaveStopFaresDto,
+  SetAttendanceDto,
+  SettleExitDto,
   TransportSettingsDto,
+  UpdateAccountDto,
+  UpdateCategoryDto,
   UpdateClassDto,
+  UpdateEmployeeDto,
   UpdateFeeStructureDto,
   UpdateFeeTypeDto,
   UpdateFinancialYearDto,
   UpdateInvoiceDto,
+  UpdateLedgerEntryDto,
   UpdateMemberDto,
   UpdateOrganizationDto,
   UpdatePaymentDto,
   UpdateRoleDto,
   UpdateRouteDto,
+  UpdateSchoolProfileDto,
   UpdateStopDto,
+  UpdateDiscountRuleDto,
+  UpdateStudentDto,
   UpdateStudentTransportDto,
+  UpdateSubjectDto,
+  UpdateVendorDto,
 } from '@mentivax/core';
 import type {
   AcademicYear,
+  AccountStatement,
   AdminOrgDetail,
   AdminOrgSummary,
   AdminUser,
+  AttendanceMonth,
   BatchPreview,
+  Employee,
+  ExitRow,
+  ExpenseAccount,
+  ExpenseCategory,
+  ExpenseOverview,
+  ExpenseReport,
+  ExpenseSettings,
+  LeaveRequestView,
+  LedgerEntry,
   LoginResult,
+  Payslip,
+  PayrollOverview,
+  PayrollSettingsView,
+  DiscountRule,
+  Holiday,
+  SchoolProfile,
+  SetupOverview,
+  StaffSummary,
+  Subject,
   Member,
   PermissionCatalog,
   RoleView,
@@ -58,10 +108,15 @@ import type {
   Payment,
   PaymentBreakdown,
   PaymentsSummary,
+  RolloverRow,
   SchoolClass,
   Student,
+  StudentDocument,
+  StudentDocumentList,
+  DocumentType,
   TransportRoute,
   TransportSettings,
+  Vendor,
 } from './types';
 
 export * from './types';
@@ -243,6 +298,13 @@ export function createClient(opts: ClientOptions) {
       years: (orgId: string) =>
         request<AcademicYear[]>('GET', `/organizations/${orgId}/academic-years`),
     },
+    /** School-configurable document checklist (Students → Documents). */
+    documentTypes: {
+      list: () => request<DocumentType[]>('GET', '/document-types'),
+      create: (dto: CreateDocumentTypeDto) => request<DocumentType>('POST', '/document-types', dto),
+      update: (id: string, dto: UpdateDocumentTypeDto) => request<DocumentType>('PATCH', `/document-types/${id}`, dto),
+      remove: (id: string) => request<void>('DELETE', `/document-types/${id}`),
+    },
     classes: {
       list: () => request<SchoolClass[]>('GET', '/classes'),
       create: (dto: CreateClassDto) => request<SchoolClass>('POST', '/classes', dto),
@@ -264,10 +326,26 @@ export function createClient(opts: ClientOptions) {
         request<FeeStructureRow[]>('PUT', '/fee-structure', dto),
     },
     students: {
-      list: (params: { classId?: string; status?: string; search?: string } = {}) =>
+      list: (params: { classId?: string; status?: string; enrollment?: string; search?: string } = {}) =>
         request<Student[]>('GET', `/students${q(params)}`),
       get: (id: string) => request<Student>('GET', `/students/${id}`),
       create: (dto: CreateStudentDto) => request<Student>('POST', '/students', dto),
+      update: (id: string, dto: UpdateStudentDto) => request<Student>('PATCH', `/students/${id}`, dto),
+      /** Year rollover: preview and promote all active students to the next standard. */
+      rolloverPreview: () => request<RolloverRow[]>('GET', '/students/rollover/preview'),
+      rollover: () => request<{ promoted: number; graduated: number }>('POST', '/students/rollover', {}),
+      /** Document files stored in S3 under {admissionYear}/{admissionNo}/. */
+      documents: {
+        list: (studentId: string) => request<StudentDocumentList>('GET', `/students/${studentId}/documents`),
+        presign: (studentId: string, dto: PresignDocumentDto) =>
+          request<{ uploadUrl: string; s3Key: string }>('POST', `/students/${studentId}/documents/presign`, dto),
+        confirm: (studentId: string, dto: ConfirmDocumentDto) =>
+          request<StudentDocument>('POST', `/students/${studentId}/documents`, dto),
+        url: (studentId: string, docId: string) =>
+          request<{ url: string }>('GET', `/students/${studentId}/documents/${docId}/url`),
+        remove: (studentId: string, docId: string) =>
+          request<void>('DELETE', `/students/${studentId}/documents/${docId}`),
+      },
       /** Assign or clear a student's transport stop + shift. */
       assignTransport: (id: string, dto: UpdateStudentTransportDto) =>
         request<Student>('PATCH', `/students/${id}/transport`, dto),
@@ -331,6 +409,120 @@ export function createClient(opts: ClientOptions) {
         request<Payment>('PATCH', `/payments/${id}`, dto),
       /** Void a payment: mark inactive and reverse its effect on invoices. */
       deactivate: (id: string) => request<Payment>('POST', `/payments/${id}/deactivate`, {}),
+    },
+    expenses: {
+      /** Books + KPIs for the active year (respecting the date filter). */
+      overview: (params: { from?: string; to?: string } = {}) =>
+        request<ExpenseOverview>('GET', `/expenses/overview${q(params)}`),
+      entries: (
+        params: {
+          kind?: string;
+          accountId?: string;
+          categoryId?: string;
+          status?: string;
+          from?: string;
+          to?: string;
+          search?: string;
+        } = {},
+      ) => request<LedgerEntry[]>('GET', `/expenses/entries${q(params)}`),
+      createEntry: (dto: CreateLedgerEntryDto) =>
+        request<LedgerEntry>('POST', '/expenses/entries', dto),
+      updateEntry: (id: string, dto: UpdateLedgerEntryDto) =>
+        request<LedgerEntry>('PATCH', `/expenses/entries/${id}`, dto),
+      removeEntry: (id: string) => request<void>('DELETE', `/expenses/entries/${id}`),
+      approveEntry: (id: string) => request<LedgerEntry>('POST', `/expenses/entries/${id}/approve`, {}),
+      rejectEntry: (id: string) => request<void>('POST', `/expenses/entries/${id}/reject`, {}),
+      statement: (params: { accountId?: string; from?: string; to?: string } = {}) =>
+        request<AccountStatement>('GET', `/expenses/statement${q(params)}`),
+      report: () => request<ExpenseReport>('GET', '/expenses/report'),
+      accounts: {
+        list: () => request<ExpenseAccount[]>('GET', '/expenses/accounts'),
+        create: (dto: CreateAccountDto) => request<ExpenseAccount>('POST', '/expenses/accounts', dto),
+        update: (id: string, dto: UpdateAccountDto) =>
+          request<ExpenseAccount>('PATCH', `/expenses/accounts/${id}`, dto),
+        remove: (id: string) => request<void>('DELETE', `/expenses/accounts/${id}`),
+      },
+      categories: {
+        list: () => request<ExpenseCategory[]>('GET', '/expenses/categories'),
+        create: (dto: CreateCategoryDto) =>
+          request<ExpenseCategory>('POST', '/expenses/categories', dto),
+        update: (id: string, dto: UpdateCategoryDto) =>
+          request<ExpenseCategory>('PATCH', `/expenses/categories/${id}`, dto),
+        remove: (id: string) => request<void>('DELETE', `/expenses/categories/${id}`),
+      },
+      vendors: {
+        list: () => request<Vendor[]>('GET', '/expenses/vendors'),
+        create: (dto: CreateVendorDto) => request<Vendor>('POST', '/expenses/vendors', dto),
+        update: (id: string, dto: UpdateVendorDto) =>
+          request<Vendor>('PATCH', `/expenses/vendors/${id}`, dto),
+        remove: (id: string) => request<void>('DELETE', `/expenses/vendors/${id}`),
+      },
+      settings: {
+        get: () => request<ExpenseSettings>('GET', '/expenses/settings'),
+        update: (dto: ExpenseSettingsDto) =>
+          request<ExpenseSettings>('PUT', '/expenses/settings', dto),
+      },
+    },
+    staff: {
+      summary: () => request<StaffSummary>('GET', '/staff/summary'),
+      list: (params: { role?: string; search?: string; status?: string } = {}) =>
+        request<Employee[]>('GET', `/staff/employees${q(params)}`),
+      get: (id: string) => request<Employee>('GET', `/staff/employees/${id}`),
+      hire: (dto: CreateEmployeeDto) => request<Employee>('POST', '/staff/employees', dto),
+      update: (id: string, dto: UpdateEmployeeDto) =>
+        request<Employee>('PATCH', `/staff/employees/${id}`, dto),
+      recordRaise: (id: string, dto: RecordRaiseDto) =>
+        request<Employee>('POST', `/staff/employees/${id}/raise`, dto),
+      markExit: (id: string, dto: MarkExitDto) =>
+        request<Employee>('POST', `/staff/employees/${id}/exit`, dto),
+      attendance: (month: string) =>
+        request<AttendanceMonth>('GET', `/staff/attendance${q({ month })}`),
+      setAttendance: (dto: SetAttendanceDto) =>
+        request<AttendanceMonth>('PUT', '/staff/attendance', dto),
+      leave: {
+        list: () => request<LeaveRequestView[]>('GET', '/staff/leave'),
+        create: (dto: CreateLeaveDto) => request<LeaveRequestView>('POST', '/staff/leave', dto),
+        decide: (id: string, dto: DecideLeaveDto) =>
+          request<LeaveRequestView>('PATCH', `/staff/leave/${id}`, dto),
+      },
+      payroll: (month: string) => request<PayrollOverview>('GET', `/staff/payroll${q({ month })}`),
+      pay: (dto: PayStaffDto) => request<Payslip>('POST', '/staff/payroll/pay', dto),
+      payslips: () => request<Payslip[]>('GET', '/staff/payslips'),
+      exits: () => request<ExitRow[]>('GET', '/staff/exits'),
+      settle: (employeeId: string, dto: SettleExitDto) =>
+        request<ExitRow>('POST', `/staff/exits/${employeeId}/settle`, dto),
+      settings: {
+        get: () => request<PayrollSettingsView>('GET', '/staff/settings'),
+        update: (dto: PayrollSettingsDto) =>
+          request<PayrollSettingsView>('PUT', '/staff/settings', dto),
+      },
+    },
+    setup: {
+      overview: () => request<SetupOverview>('GET', '/setup/overview'),
+      profile: {
+        get: () => request<SchoolProfile>('GET', '/setup/profile'),
+        update: (dto: UpdateSchoolProfileDto) =>
+          request<SchoolProfile>('PATCH', '/setup/profile', dto),
+      },
+      subjects: {
+        list: () => request<Subject[]>('GET', '/setup/subjects'),
+        create: (dto: CreateSubjectDto) => request<Subject>('POST', '/setup/subjects', dto),
+        update: (id: string, dto: UpdateSubjectDto) =>
+          request<Subject>('PATCH', `/setup/subjects/${id}`, dto),
+        remove: (id: string) => request<void>('DELETE', `/setup/subjects/${id}`),
+      },
+      holidays: {
+        list: () => request<Holiday[]>('GET', '/setup/holidays'),
+        create: (dto: CreateHolidayDto) => request<Holiday>('POST', '/setup/holidays', dto),
+        remove: (id: string) => request<void>('DELETE', `/setup/holidays/${id}`),
+      },
+      discounts: {
+        list: () => request<DiscountRule[]>('GET', '/setup/discounts'),
+        create: (dto: CreateDiscountRuleDto) => request<DiscountRule>('POST', '/setup/discounts', dto),
+        update: (id: string, dto: UpdateDiscountRuleDto) =>
+          request<DiscountRule>('PATCH', `/setup/discounts/${id}`, dto),
+        remove: (id: string) => request<void>('DELETE', `/setup/discounts/${id}`),
+      },
     },
   };
 }

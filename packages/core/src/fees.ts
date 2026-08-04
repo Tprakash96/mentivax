@@ -8,6 +8,7 @@ import type {
   DiscountType,
   FeePeriod,
   FeeStructureInput,
+  PricingMode,
   TransportFareInput,
   TransportShift,
 } from './types';
@@ -16,12 +17,21 @@ import type {
 export const TRANSPORT_FEE_KEY = 'transport';
 
 /**
- * The amount (paise) a student owes for a fee, honouring the pricing mode:
- * COMMON -> flat for everyone; SPLIT -> new vs old admission.
+ * A transport fee head prices by the student's stop/distance (or a flat fare),
+ * so its amount comes from the Transport module, not a per-class amount.
+ */
+export const isTransportPricing = (mode: PricingMode): boolean =>
+  mode === 'STOP' || mode === 'DISTANCE' || mode === 'FLAT';
+
+/**
+ * The amount (paise) a student owes for an *academic* fee: COMMON -> flat for
+ * everyone; SPLIT -> new vs old admission. Transport fees resolve to 0 here —
+ * they're billed through the Transport module (see the invoice service).
  */
 export function resolveFeeAmount(fee: FeeStructureInput, isNewAdmission: boolean): number {
   if (fee.pricingMode === 'COMMON') return fee.flatAmount;
-  return isNewAdmission ? fee.newAmount : fee.oldAmount;
+  if (fee.pricingMode === 'SPLIT') return isNewAdmission ? fee.newAmount : fee.oldAmount;
+  return 0;
 }
 
 /** Whether a fee is billed across multiple periods (terms/months). */
@@ -33,10 +43,27 @@ export interface PeriodMeta {
   labels: string[];
 }
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 /**
- * Period labels for a fee. `startYear` drives the calendar for monthly plans.
+ * Period labels for a fee.
+ *
+ * A fee is billed in `periodCount` even *installments* — that count, never the
+ * calendar span of the academic year, drives the money math (see
+ * `periodBreakdown`). So a year that runs 15 Mar → 14 Mar (≈12 months but not
+ * on month boundaries) is still, say, 12 monthly installments; it can never
+ * silently become "13 months".
+ *
+ * Monthly labels roll forward from the academic year's actual start month, so a
+ * March-starting school reads "Mar … Feb", an April-starting one "Apr … Mar".
+ * `startMonth` is 0-indexed (0 = Jan); it defaults to 3 (April), the
+ * conventional Indian academic-year start.
  */
-export function periodMeta(fee: Pick<FeeStructureInput, 'period' | 'periodCount'>, startYear = 2026): PeriodMeta {
+export function periodMeta(
+  fee: Pick<FeeStructureInput, 'period' | 'periodCount'>,
+  startYear = 2026,
+  startMonth = 3,
+): PeriodMeta {
   if (fee.period === 'TERM') {
     return {
       count: fee.periodCount,
@@ -44,12 +71,12 @@ export function periodMeta(fee: Pick<FeeStructureInput, 'period' | 'periodCount'
     };
   }
   if (fee.period === 'MONTHLY') {
-    const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
     return {
       count: fee.periodCount,
       labels: Array.from({ length: fee.periodCount }, (_, i) => {
-        const m = months[i % 12] ?? '';
-        const yr = i < 9 ? startYear : startYear + 1;
+        const abs = startMonth + i;
+        const m = MONTH_NAMES[((abs % 12) + 12) % 12] ?? '';
+        const yr = startYear + Math.floor(abs / 12);
         return `${m} ${yr}`;
       }),
     };
@@ -58,6 +85,19 @@ export function periodMeta(fee: Pick<FeeStructureInput, 'period' | 'periodCount'
     return { count: 1, labels: ['Due date'] };
   }
   return { count: 1, labels: ['One-time'] };
+}
+
+/**
+ * Whole months an academic year spans, start-date inclusive. Useful to suggest
+ * a sensible `periodCount` for monthly fees. 15 Mar 2026 → 14 Mar 2027 gives 12
+ * (the trailing partial month is not a 13th installment).
+ */
+export function academicYearMonths(startISO: string | Date, endISO: string | Date): number {
+  const s = new Date(startISO);
+  const e = new Date(endISO);
+  const months = (e.getUTCFullYear() - s.getUTCFullYear()) * 12 + (e.getUTCMonth() - s.getUTCMonth());
+  // A start-day earlier than the end-day means the final month is fully covered.
+  return Math.max(1, months + (e.getUTCDate() >= s.getUTCDate() ? 1 : 0));
 }
 
 /** Even per-period breakdown for a fee amount. */
@@ -104,6 +144,8 @@ export function buildStudentLines(
 ): DraftLine[] {
   const lines: DraftLine[] = [];
   for (const fee of fees) {
+    // Transport fee heads are billed through the Transport module, not here.
+    if (isTransportPricing(fee.pricingMode)) continue;
     const gross = resolveFeeAmount(fee, student.isNewAdmission);
     if (gross <= 0) continue;
     lines.push({
@@ -129,18 +171,24 @@ export function resolveTransportFare(fare: TransportFareInput, shift: TransportS
   return shift === 'BOTH' ? fare.bothWayFare : fare.oneWayFare;
 }
 
-/** A billable transport line for a student's stop + shift (or null if free). */
+/**
+ * A billable transport line for a student's stop + shift (or null if free).
+ * `headName` is the school's transport fee-head name (e.g. "Transport Fee");
+ * when omitted the line falls back to a descriptive default.
+ */
 export function buildTransportLine(
   fare: TransportFareInput,
   shift: TransportShift,
+  headName?: string,
 ): DraftLine | null {
   const gross = resolveTransportFare(fare, shift);
   if (gross <= 0) return null;
   const shiftLabel = shift === 'BOTH' ? 'Both ways' : shift === 'MORNING' ? 'Morning' : 'Evening';
   const place = fare.landmarkName ? `${fare.stopName} · ${fare.landmarkName}` : fare.stopName;
+  const lead = headName?.trim() || 'Transport';
   return {
     key: TRANSPORT_FEE_KEY,
-    name: `Transport — ${fare.routeName} · ${place} (${shiftLabel})`,
+    name: `${lead} — ${place} (${shiftLabel})`,
     period: 'MONTHLY',
     gross,
     discountType: 'NONE',
@@ -155,6 +203,8 @@ export function buildTransportLine(
 export interface TransportBillingInput {
   fare: TransportFareInput;
   shift: TransportShift;
+  /** The school's transport fee-head name, if one is defined. */
+  headName?: string;
 }
 
 /**
@@ -168,7 +218,7 @@ export function buildInvoiceLines(
 ): DraftLine[] {
   const lines = buildStudentLines(fees, student);
   if (transport) {
-    const t = buildTransportLine(transport.fare, transport.shift);
+    const t = buildTransportLine(transport.fare, transport.shift, transport.headName);
     if (t) lines.push(t);
   }
   return lines;

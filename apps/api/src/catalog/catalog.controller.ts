@@ -55,13 +55,19 @@ export class ClassesController {
     const classes = await this.prisma.schoolClass.findMany({
       where: { organizationId: t.organizationId, academicYearId: t.academicYearId },
       orderBy: { rank: 'asc' },
-      include: { _count: { select: { students: true } } },
+      include: {
+        _count: { select: { students: true } },
+        classTeacher: { select: { name: true } },
+      },
     });
     return classes.map((c) => ({
       id: c.id,
       name: c.name,
       rank: c.rank,
       studentCount: c._count.students,
+      sections: c.sections,
+      classTeacherId: c.classTeacherId,
+      classTeacherName: c.classTeacher?.name ?? null,
     }));
   }
 
@@ -83,7 +89,15 @@ export class ClassesController {
         rank,
       },
     });
-    return { id: c.id, name: c.name, rank: c.rank, studentCount: 0 };
+    return {
+      id: c.id,
+      name: c.name,
+      rank: c.rank,
+      studentCount: 0,
+      sections: c.sections,
+      classTeacherId: c.classTeacherId,
+      classTeacherName: null,
+    };
   }
 
   @Patch(':id')
@@ -108,10 +122,26 @@ export class ClassesController {
 
     const updated = await this.prisma.schoolClass.update({
       where: { id },
-      data: { name: name ?? undefined, rank: dto.rank ?? undefined },
-      include: { _count: { select: { students: true } } },
+      data: {
+        name: name ?? undefined,
+        rank: dto.rank ?? undefined,
+        sections: dto.sections ?? undefined,
+        classTeacherId: dto.classTeacherId === undefined ? undefined : dto.classTeacherId,
+      },
+      include: {
+        _count: { select: { students: true } },
+        classTeacher: { select: { name: true } },
+      },
     });
-    return { id: updated.id, name: updated.name, rank: updated.rank, studentCount: updated._count.students };
+    return {
+      id: updated.id,
+      name: updated.name,
+      rank: updated.rank,
+      studentCount: updated._count.students,
+      sections: updated.sections,
+      classTeacherId: updated.classTeacherId,
+      classTeacherName: updated.classTeacher?.name ?? null,
+    };
   }
 
   @Delete(':id')
@@ -149,6 +179,7 @@ type FeeTypeRecord = {
   pricingMode: string;
   periodCount: number;
   dueDate: Date | null;
+  transportFlatAmount: number;
   rank: number;
 };
 
@@ -187,6 +218,7 @@ export class FeeTypesController {
         pricingMode: dto.pricingMode,
         periodCount: dto.periodCount,
         dueDate: dto.period === 'DUE_DATE' && dto.dueDate ? new Date(dto.dueDate) : null,
+        transportFlatAmount: dto.pricingMode === 'FLAT' ? dto.transportFlatAmount : 0,
         rank,
       },
     });
@@ -212,6 +244,7 @@ export class FeeTypesController {
         periodCount: dto.periodCount,
         // Only DUE_DATE fees carry a date; clear it otherwise.
         dueDate: dto.period === 'DUE_DATE' && dto.dueDate ? new Date(dto.dueDate) : null,
+        transportFlatAmount: dto.pricingMode === 'FLAT' ? dto.transportFlatAmount : 0,
       },
     });
     if (count === 0) throw new NotFoundException('Fee type not found');
@@ -270,6 +303,7 @@ export class FeeTypesController {
       pricingMode: f.pricingMode,
       periodCount: f.periodCount,
       dueDate: f.dueDate ? f.dueDate.toISOString() : null,
+      transportFlatAmount: f.transportFlatAmount,
       rank: f.rank,
     };
   }

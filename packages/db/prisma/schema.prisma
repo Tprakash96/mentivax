@@ -30,6 +30,13 @@ model Organization {
   /// ISO 4217, defaults to Indian Rupee
   currency  String   @default("INR")
   timezone  String   @default("Asia/Kolkata")
+  /// School profile (set in School Setup; printed on receipts/invoices).
+  affiliation   String @default("")
+  board         String @default("")
+  principalName String @default("")
+  phone         String @default("")
+  email         String @default("")
+  address       String @default("")
   /// Suspended orgs stay in the database but every sign-in to them is refused.
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -49,6 +56,21 @@ model Organization {
   transportRoutes TransportRoute[]
   transportStops  TransportStop[]
   transportSetting TransportSetting?
+  expenseAccounts   ExpenseAccount[]
+  expenseCategories ExpenseCategory[]
+  vendors           Vendor[]
+  ledgerEntries     LedgerEntry[]
+  expenseSetting    ExpenseSetting?
+  employees         Employee[]
+  leaveRequests     LeaveRequest[]
+  attendanceRecords AttendanceRecord[]
+  payRuns           PayRun[]
+  payrollSetting    PayrollSetting?
+  subjects          Subject[]
+  holidays          Holiday[]
+  discountRules     DiscountRule[]
+  studentDocuments  StudentDocument[]
+  documentTypes     DocumentType[]
 }
 
 /// Org-wide transport fare settings: whether fares are fixed per stop/landmark
@@ -223,8 +245,13 @@ model SchoolClass {
   name           String
   /// Sort order (Nursery = 0 ... 12 STD = 14)
   rank           Int          @default(0)
+  /// Section labels within the class, e.g. ["A","B"].
+  sections       String[]     @default(["A"])
+  /// The employee who is class teacher (School Setup).
+  classTeacherId String?
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  classTeacher   Employee?    @relation("ClassTeacher", fields: [classTeacherId], references: [id], onDelete: SetNull)
 
   students      Student[]
   feeStructures FeeStructure[]
@@ -244,12 +271,20 @@ enum FeePeriod {
   DUE_DATE
 }
 
-/// How a fee is priced across new vs old students.
+/// How a fee is priced. COMMON/SPLIT are academic (amount set per class);
+/// STOP/DISTANCE/FLAT mark a *transport* fee whose per-student amount comes
+/// from the Transport module (stop fare, ₹/km × distance) or a single flat fare.
 enum PricingMode {
   /// One price for everyone (uses flatAmount).
   COMMON
   /// Different price for new vs old admissions (uses newAmount / oldAmount).
   SPLIT
+  /// Transport: the fare of the student's assigned stop/landmark.
+  STOP
+  /// Transport: ₹/km × the student's distance from school.
+  DISTANCE
+  /// Transport: a single flat fare for every rider (uses transportFlatAmount).
+  FLAT
 }
 
 /// A kind of fee an org charges, e.g. "School Fee", "Van Fee".
@@ -266,6 +301,8 @@ model FeeType {
   periodCount    Int          @default(1)
   /// For DUE_DATE fees: the single calendar date the whole fee is due.
   dueDate        DateTime?
+  /// Flat transport fare (paise) — used only when pricingMode = FLAT.
+  transportFlatAmount Int     @default(0)
   /// Display order in the UI.
   rank           Int          @default(0)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -300,15 +337,40 @@ model FeeStructure {
 // Students
 // ---------------------------------------------------------------------------
 
+enum StudentEnrollment {
+  APPLICANT
+  ACTIVE
+  TC_ISSUED
+  ALUMNI
+}
+
 model Student {
   id             String       @id @default(cuid())
   organizationId String
   academicYearId String
   classId        String
   name           String
+  /// Lifecycle: APPLICANT (not yet admitted) → ACTIVE → TC_ISSUED → ALUMNI (left).
+  enrollmentStatus StudentEnrollment @default(ACTIVE)
+  /// Collected documents, from the standard checklist (Aadhaar, PAN, …).
+  documents      String[]     @default([])
+  /// When the student left (TC issued / graduated).
+  exitDate       DateTime?
+  exitReason     String       @default("")
+  /// Admission number printed on records (e.g. "MVX1104").
+  admissionNo    String       @default("")
+  /// NEW | TRANSFER | READMISSION — drives new/old fee pricing (NEW = new).
+  admissionType  String       @default("NEW")
   /// New admission this year vs continuing student.
   isNewAdmission Boolean      @default(false)
+  dateOfBirth    DateTime?
+  /// Government identifiers the school collects.
+  emisNo         String       @default("")
+  penNo          String       @default("")
+  aadhaar        String       @default("")
   parentName     String?
+  /// Guardian relationship, e.g. "Father", "Mother", "Guardian".
+  guardianRelation String     @default("")
   phone          String?
   email          String?
   /// Transport assignment (optional). A student with a stop is billed transport.
@@ -317,11 +379,14 @@ model Student {
   /// Which pickup landmark within the stop the student boards at.
   transportLandmark String?
   /// Fee adjustments (persistent, honoured on every invoice generation).
-  /// Exempt students are skipped entirely; discount applies to the whole invoice.
+  /// Exempt students are skipped entirely.
   feeExempt      Boolean      @default(false)
   discountType   DiscountType @default(NONE)
   /// PERCENT: basis points (1000 = 10%); FLAT: paise.
   discountValue  Int          @default(0)
+  /// Fee key the discount applies to (from the concession's `appliesTo`),
+  /// or "" for the whole invoice. Scopes the discount to one fee head.
+  discountFeeKey String       @default("")
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -331,10 +396,33 @@ model Student {
 
   invoices Invoice[]
   payments Payment[]
+  docFiles StudentDocument[]
 
   @@index([organizationId, academicYearId, classId])
   @@index([organizationId, name])
   @@index([transportStopId])
+}
+
+/// An uploaded document file stored in S3 under
+/// `{admissionYear}/{admissionNo}/…`. The `documents` string[] on Student is
+/// the collected-checklist; this is the actual file record.
+model StudentDocument {
+  id             String       @id @default(cuid())
+  organizationId String
+  studentId      String
+  /// Checklist type, e.g. "Aadhaar", "Birth certificate".
+  docType        String
+  fileName       String
+  /// S3 object key (the full path within the bucket).
+  s3Key          String
+  sizeBytes      Int          @default(0)
+  contentType    String       @default("")
+  uploadedAt     DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  student        Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([organizationId])
 }
 
 // ---------------------------------------------------------------------------
@@ -535,4 +623,364 @@ model PaymentAllocation {
 
   @@index([paymentId])
   @@index([invoiceId])
+}
+
+// ---------------------------------------------------------------------------
+// Expenses & accounts module
+// ---------------------------------------------------------------------------
+
+enum LedgerKind {
+  INCOME
+  EXPENSE
+}
+
+enum LedgerStatus {
+  POSTED
+  PENDING
+}
+
+enum ExpenseMode {
+  CASH
+  UPI
+  BANK
+  CHEQUE
+}
+
+/// A ledger/book the school keeps cash in (Contingent, Internal account, …).
+model ExpenseAccount {
+  id             String        @id @default(cuid())
+  organizationId String
+  label          String
+  note           String        @default("")
+  /// Opening balance in paise.
+  openingBalance Int           @default(0)
+  rank           Int           @default(0)
+  createdAt      DateTime      @default(now())
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entries        LedgerEntry[]
+
+  @@index([organizationId])
+}
+
+/// Income/expense category, optionally with a yearly budget ceiling (paise).
+model ExpenseCategory {
+  id             String        @id @default(cuid())
+  organizationId String
+  label          String
+  kind           LedgerKind    @default(EXPENSE)
+  /// Yearly budget in paise; 0 = no ceiling. Income categories are always 0.
+  budget         Int           @default(0)
+  color          String        @default("#7C889F")
+  rank           Int           @default(0)
+  createdAt      DateTime      @default(now())
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entries        LedgerEntry[]
+
+  @@index([organizationId])
+}
+
+/// A payee/supplier the school pays (or a recurring income source).
+model Vendor {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  supplies       String       @default("")
+  phone          String       @default("")
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+/// One income or expense voucher in a book. Amounts are positive paise; the
+/// sign is derived from `kind`. Pending expenses are excluded from balances
+/// until approved.
+model LedgerEntry {
+  id             String           @id @default(cuid())
+  organizationId String
+  academicYearId String
+  accountId      String
+  categoryId     String?
+  kind           LedgerKind
+  /// Voucher number, unique per org (PV-2627-NNN / RV-2627-NNN).
+  voucherNo      String
+  date           DateTime
+  title          String
+  /// Free-text payee (expense) or source (income).
+  person         String           @default("")
+  /// Amount in paise, always positive.
+  amount         Int
+  mode           ExpenseMode      @default(CASH)
+  note           String           @default("")
+  status         LedgerStatus     @default(POSTED)
+  /// True once an over-limit expense has been approved (blocks re-pending).
+  signed         Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account        ExpenseAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category       ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, voucherNo])
+  @@index([organizationId, academicYearId, date])
+  @@index([accountId])
+  @@index([categoryId])
+}
+
+/// Per-org accounts switches (owned conceptually by School Setup).
+model ExpenseSetting {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  /// Expenses above `approvalLimit` need sign-off before posting.
+  approvalsOn    Boolean      @default(true)
+  /// When off, entries are stored uncategorised and reports group by payee.
+  categoriesOn   Boolean      @default(true)
+  /// Approval threshold in paise (default ₹20,000).
+  approvalLimit  Int          @default(2000000)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Staff & payroll module
+// ---------------------------------------------------------------------------
+
+enum StaffRole {
+  TEACHER
+  TRANSPORT
+  OFFICE
+  SUPPORT
+  MANAGEMENT
+  VISITING
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  EXITED
+}
+
+enum LeaveType {
+  CASUAL
+  SICK
+  EARNED
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// An employee on the school's rolls. Salary amounts are monthly, in paise.
+model Employee {
+  id             String         @id @default(cuid())
+  organizationId String
+  /// Staff code, e.g. "AGS-001".
+  code           String
+  name           String
+  role           StaffRole      @default(TEACHER)
+  designation    String         @default("")
+  phone          String         @default("")
+  /// Date of joining.
+  doj            DateTime
+  /// Monthly basic pay (paise) — drives the whole salary structure.
+  basic          Int            @default(0)
+  /// Special allowance (paise).
+  special        Int            @default(0)
+  pfEnabled      Boolean        @default(true)
+  esiEnabled     Boolean        @default(false)
+  ptEnabled      Boolean        @default(false)
+  /// Fixed monthly TDS (paise); 0 = none.
+  tds            Int            @default(0)
+  /// Outstanding salary advance balance (paise).
+  advance        Int            @default(0)
+  /// Leave balances remaining this year.
+  clBalance      Int            @default(12)
+  slBalance      Int            @default(6)
+  elBalance      Int            @default(12)
+  /// Transport-staff only.
+  licence        String?
+  licExp         DateTime?
+  vehicle        String?
+  route          String?
+  /// Bank details for salary credit.
+  accountName    String         @default("")
+  accountNo      String         @default("")
+  ifsc           String         @default("")
+  /// Collected documents (from the standard checklist).
+  docs           String[]       @default([])
+  /// Increment history: [{ date, note, delta }] (delta in paise).
+  increments     Json           @default("[]")
+  status         EmployeeStatus @default(ACTIVE)
+  exitDate       DateTime?
+  exitReason     String?
+  exitSettled    Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leaveRequests  LeaveRequest[]
+  attendance     AttendanceRecord[]
+  payRuns        PayRun[]
+  classesLed     SchoolClass[]      @relation("ClassTeacher")
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+}
+
+model LeaveRequest {
+  id             String       @id @default(cuid())
+  organizationId String
+  employeeId     String
+  type           LeaveType    @default(CASUAL)
+  days           Int          @default(1)
+  fromDate       DateTime
+  reason         String       @default("")
+  status         LeaveStatus  @default(PENDING)
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employee       Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([employeeId])
+}
+
+/// One month of attendance for one employee: `days` is one char per calendar
+/// day — P present, A absent (LOP), L approved leave (paid), H holiday.
+model AttendanceRecord {
+  id             String       @id @default(cuid())
+  organizationId String
+  employeeId     String
+  /// "YYYY-MM".
+  month          String
+  days           String       @default("")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employee       Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, month])
+  @@index([organizationId])
+}
+
+/// A processed payslip. The full salary computation is snapshotted here at pay
+/// time so a later salary change never rewrites history. All amounts in paise.
+model PayRun {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  academicYearId     String
+  employeeId         String
+  /// Payslip number, unique per org (PS-2627-NNN).
+  payslipNo          String
+  /// Pay month, "YYYY-MM".
+  month              String
+  lopDays            Int          @default(0)
+  mode               ExpenseMode  @default(BANK)
+  paidAt             DateTime     @default(now())
+  // --- Snapshot of the computation ---
+  basic              Int
+  da                 Int
+  hra                Int
+  conveyance         Int
+  special            Int
+  gross              Int
+  lop                Int
+  pf                 Int
+  esi                Int
+  pt                 Int
+  tds                Int
+  advanceRecovered   Int
+  deductionsTotal    Int
+  net                Int
+  /// Set when this payment was posted to Expenses under "Salaries".
+  ledgerEntryId      String?
+  createdAt          DateTime     @default(now())
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employee           Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, payslipNo])
+  @@unique([employeeId, month])
+  @@index([organizationId, month])
+}
+
+/// Per-org payroll settings (owned conceptually by School Setup).
+model PayrollSetting {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  /// Dearness allowance as a percent of basic.
+  daPercent      Int          @default(30)
+  /// House-rent allowance as a percent of basic.
+  hraPercent     Int          @default(20)
+  /// Provident fund as a percent of (capped) basic.
+  pfPercent      Int          @default(12)
+  /// Professional tax, flat per month (paise).
+  ptMonthly      Int          @default(20000)
+  /// Conveyance allowance, flat per month (paise); 0 for visiting staff.
+  conveyance     Int          @default(120000)
+  /// Post each salary payment to Expenses under "Salaries".
+  postToAccounts Boolean      @default(true)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// School Setup: subjects & holiday calendar
+// ---------------------------------------------------------------------------
+
+/// A subject in the school's academic plan, taught in a set of classes.
+model Subject {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  /// SchoolClass ids this subject is taught in.
+  classIds       String[]     @default([])
+  rank           Int          @default(0)
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+/// A holiday / vacation day in the academic calendar.
+model Holiday {
+  id             String       @id @default(cuid())
+  organizationId String
+  academicYearId String
+  name           String
+  date           DateTime
+  /// State holiday | National holiday | Vacation | School holiday.
+  kind           String       @default("School holiday")
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, academicYearId])
+}
+
+/// A named concession the school offers (School Setup → Discounts). Applied
+/// when billing (e.g. picked for a student before an invoice run).
+model DiscountRule {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  /// PERCENT or FLAT.
+  kind           DiscountType @default(PERCENT)
+  /// PERCENT: basis points (1000 = 10%); FLAT: paise.
+  value          Int          @default(0)
+  /// Fee key it applies to, or "" for the whole invoice.
+  appliesTo      String       @default("")
+  rank           Int          @default(0)
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+/// A document the school collects (School decides the list). Required types
+/// appear on every student profile; the `documents` string[] on Student marks
+/// which have been collected, matched by name.
+model DocumentType {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  required       Boolean      @default(false)
+  rank           Int          @default(0)
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
 }

@@ -22,6 +22,8 @@ export type PermissionGroup =
   | 'Invoices'
   | 'Payments'
   | 'Transport'
+  | 'Expenses'
+  | 'Staff'
   | 'Reports'
   | 'Administration';
 
@@ -165,6 +167,80 @@ export const PERMISSIONS: PermissionDef[] = [
     module: 'transport',
   },
 
+  // --- Expenses & accounts ---
+  {
+    key: 'expenses:read',
+    name: 'View accounts',
+    description: 'See the day book, account statement, and expense reports.',
+    group: 'Expenses',
+    module: 'expenses',
+  },
+  {
+    key: 'expenses:write',
+    name: 'Record income & expenses',
+    description: 'Add income and expense entries to a book.',
+    group: 'Expenses',
+    module: 'expenses',
+  },
+  {
+    key: 'expenses:approve',
+    name: 'Approve expenses',
+    description: 'Approve or reject expenses that exceed the sign-off limit.',
+    group: 'Expenses',
+    module: 'expenses',
+  },
+  {
+    key: 'expenses:manage',
+    name: 'Manage books & categories',
+    description: 'Create accounts, categories, and vendors, and set the accounts switches.',
+    group: 'Expenses',
+    module: 'expenses',
+  },
+  {
+    key: 'expenses:delete',
+    name: 'Delete entries',
+    description: 'Permanently remove a ledger entry.',
+    group: 'Expenses',
+    module: 'expenses',
+  },
+
+  // --- Staff & payroll ---
+  {
+    key: 'staff:read',
+    name: 'View staff',
+    description: 'See the employee register, attendance, leave, and payslips.',
+    group: 'Staff',
+    module: 'staff',
+  },
+  {
+    key: 'staff:write',
+    name: 'Manage staff',
+    description: 'Hire and edit employees, decide leave, and record exits.',
+    group: 'Staff',
+    module: 'staff',
+  },
+  {
+    key: 'staff:attendance',
+    name: 'Mark attendance',
+    description: 'Record daily attendance for staff.',
+    group: 'Staff',
+    module: 'staff',
+  },
+  {
+    key: 'payroll:read',
+    name: 'View payroll',
+    description: 'See salary structures, pay runs, and payslips.',
+    group: 'Staff',
+    module: 'staff',
+  },
+  {
+    key: 'payroll:run',
+    name: 'Run payroll',
+    description: 'Pay staff, issue payslips, and settle exits. Books an expense.',
+    group: 'Staff',
+    module: 'staff',
+  },
+
   // --- Reports ---
   {
     key: 'reports:read',
@@ -241,6 +317,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   'Invoices',
   'Payments',
   'Transport',
+  'Expenses',
+  'Staff',
   'Reports',
   'Administration',
 ];
@@ -304,6 +382,14 @@ export const SYSTEM_ROLES: SystemRoleDef[] = [
       'payments:read',
       'payments:write',
       'transport:read',
+      'expenses:read',
+      'expenses:write',
+      'expenses:approve',
+      'expenses:manage',
+      'expenses:delete',
+      'staff:read',
+      'payroll:read',
+      'payroll:run',
       'reports:read',
       'settings:read',
     ],

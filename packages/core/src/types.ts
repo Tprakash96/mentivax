@@ -4,7 +4,12 @@
  */
 
 export type FeePeriod = 'ONE_TIME' | 'TERM' | 'MONTHLY' | 'DUE_DATE';
-export type PricingMode = 'COMMON' | 'SPLIT';
+/**
+ * COMMON/SPLIT are academic (amount set per class). STOP/DISTANCE/FLAT mark a
+ * *transport* fee: the amount comes from the Transport module (assigned stop's
+ * fare, or ₹/km × distance) or a single flat fare.
+ */
+export type PricingMode = 'COMMON' | 'SPLIT' | 'STOP' | 'DISTANCE' | 'FLAT';
 export type DiscountType = 'NONE' | 'PERCENT' | 'FLAT';
 export type InvoiceStatus = 'DRAFT' | 'PENDING' | 'PARTIAL' | 'PAID' | 'CANCELLED';
 export type PaymentMode = 'CASH' | 'UPI' | 'BANK_TRANSFER' | 'CHEQUE' | 'CARD';
@@ -23,6 +28,8 @@ export interface FeeStructureInput {
   flatAmount: number;
   newAmount: number;
   oldAmount: number;
+  /** Flat transport fare (paise) — used only when pricingMode = FLAT. */
+  transportFlatAmount?: number;
 }
 
 /** A pickup landmark within a stop, with its own fares (paise). */

@@ -5,7 +5,7 @@
 import { z } from 'zod';
 
 export const feePeriod = z.enum(['ONE_TIME', 'TERM', 'MONTHLY', 'DUE_DATE']);
-export const pricingMode = z.enum(['COMMON', 'SPLIT']);
+export const pricingMode = z.enum(['COMMON', 'SPLIT', 'STOP', 'DISTANCE', 'FLAT']);
 export const discountType = z.enum(['NONE', 'PERCENT', 'FLAT']);
 export const invoiceStatus = z.enum(['DRAFT', 'PENDING', 'PARTIAL', 'PAID', 'CANCELLED']);
 export const paymentMode = z.enum(['CASH', 'UPI', 'BANK_TRANSFER', 'CHEQUE', 'CARD']);
@@ -15,22 +15,41 @@ export const transportShift = z.enum(['BOTH', 'MORNING', 'EVENING']);
 
 // --- Students -------------------------------------------------------------
 
+export const admissionType = z.enum(['NEW', 'TRANSFER', 'READMISSION']);
+export type AdmissionType = z.infer<typeof admissionType>;
+
+export const studentEnrollment = z.enum(['APPLICANT', 'ACTIVE', 'TC_ISSUED', 'ALUMNI']);
+export type StudentEnrollmentKey = z.infer<typeof studentEnrollment>;
+
 export const createStudentSchema = z
   .object({
     name: z.string().min(1),
     classId: z.string().min(1),
+    admissionNo: z.string().max(40).optional(),
+    admissionType: admissionType.optional(),
     isNewAdmission: z.boolean().default(false),
+    /** ISO date. */
+    dateOfBirth: z.string().optional(),
+    emisNo: z.string().max(40).optional(),
+    penNo: z.string().max(40).optional(),
+    aadhaar: z.string().max(20).optional(),
     parentName: z.string().optional(),
+    guardianRelation: z.string().max(40).optional(),
     phone: z.string().optional(),
     email: z.string().email().optional(),
-    /** Optional transport assignment: a stop + which shift they take. */
+    /** Documents collected at admission (from the school's checklist). */
+    documents: z.array(z.string()).optional(),
+    /** Optional transport assignment: a stop + pickup landmark + which shift. */
     transportStopId: z.string().optional(),
     transportShift: transportShift.optional(),
+    transportLandmark: z.string().optional(),
     /** Persistent fee adjustments applied on every invoice generation. */
     feeExempt: z.boolean().optional(),
     discountType: discountType.optional(),
     /** PERCENT: basis points (1000 = 10%); FLAT: paise. */
     discountValue: z.number().int().nonnegative().optional(),
+    /** Fee key the discount targets (from the concession), or "" for whole invoice. */
+    discountFeeKey: z.string().max(60).optional(),
   })
   .superRefine((v, ctx) => {
     if (v.transportStopId && !v.transportShift) {
@@ -38,6 +57,35 @@ export const createStudentSchema = z
     }
   });
 export type CreateStudentDto = z.infer<typeof createStudentSchema>;
+
+/** Edit an existing student (all fields optional — only sent fields change). */
+export const updateStudentSchema = z.object({
+  name: z.string().min(1).optional(),
+  classId: z.string().min(1).optional(),
+  admissionNo: z.string().max(40).optional(),
+  admissionType: admissionType.optional(),
+  isNewAdmission: z.boolean().optional(),
+  dateOfBirth: z.string().nullish(),
+  emisNo: z.string().max(40).optional(),
+  penNo: z.string().max(40).optional(),
+  aadhaar: z.string().max(20).optional(),
+  parentName: z.string().nullish(),
+  guardianRelation: z.string().max(40).optional(),
+  phone: z.string().nullish(),
+  email: z.string().email().nullish(),
+  /** Lifecycle status + document checklist + exit info. */
+  enrollmentStatus: studentEnrollment.optional(),
+  documents: z.array(z.string()).optional(),
+  exitReason: z.string().max(120).optional(),
+  feeExempt: z.boolean().optional(),
+  discountType: discountType.optional(),
+  discountValue: z.number().int().nonnegative().optional(),
+  discountFeeKey: z.string().max(60).optional(),
+  transportStopId: z.string().nullish(),
+  transportShift: transportShift.nullish(),
+  transportLandmark: z.string().nullish(),
+});
+export type UpdateStudentDto = z.infer<typeof updateStudentSchema>;
 
 /** Assign (or clear) a student's transport stop + shift. */
 export const updateStudentTransportSchema = z.object({
@@ -48,12 +96,14 @@ export const updateStudentTransportSchema = z.object({
 });
 export type UpdateStudentTransportDto = z.infer<typeof updateStudentTransportSchema>;
 
-/** A student's persistent fee adjustment (exemption / whole-invoice discount). */
+/** A student's persistent fee adjustment (exemption / targeted discount). */
 export const studentAdjustmentSchema = z.object({
   feeExempt: z.boolean().default(false),
   discountType: discountType.default('NONE'),
   /** PERCENT: basis points; FLAT: paise. */
   discountValue: z.number().int().nonnegative().default(0),
+  /** Fee key the discount targets, or "" for the whole invoice. Omit to preserve. */
+  discountFeeKey: z.string().max(60).optional(),
 });
 export type StudentAdjustmentDto = z.infer<typeof studentAdjustmentSchema>;
 
@@ -69,6 +119,10 @@ export type CreateClassDto = z.infer<typeof createClassSchema>;
 export const updateClassSchema = z.object({
   name: z.string().min(1).max(60).optional(),
   rank: z.number().int().nonnegative().optional(),
+  /** Section labels within the class, e.g. ["A","B"]. */
+  sections: z.array(z.string().min(1).max(8)).optional(),
+  /** Employee id of the class teacher, or null to clear. */
+  classTeacherId: z.string().nullable().optional(),
 });
 export type UpdateClassDto = z.infer<typeof updateClassSchema>;
 
@@ -244,6 +298,8 @@ const feeTypeFields = {
   periodCount: z.number().int().min(1).max(12),
   /** Required when period is DUE_DATE: ISO date the fee is due. */
   dueDate: z.string().optional(),
+  /** Flat transport fare (paise) — used only when pricingMode = FLAT. */
+  transportFlatAmount: z.number().int().nonnegative().default(0),
 };
 
 /** Cross-field checks shared by create + update (duration ↔ count ↔ dueDate). */
@@ -348,3 +404,307 @@ export const updatePaymentSchema = z.object({
   description: z.string().optional(),
 });
 export type UpdatePaymentDto = z.infer<typeof updatePaymentSchema>;
+
+// ---------------------------------------------------------------------------
+// Expenses & accounts
+// ---------------------------------------------------------------------------
+
+export const ledgerKind = z.enum(['INCOME', 'EXPENSE']);
+export type LedgerKind = z.infer<typeof ledgerKind>;
+
+export const ledgerStatus = z.enum(['POSTED', 'PENDING']);
+export type LedgerStatus = z.infer<typeof ledgerStatus>;
+
+export const expenseMode = z.enum(['CASH', 'UPI', 'BANK', 'CHEQUE']);
+export type ExpenseMode = z.infer<typeof expenseMode>;
+
+/** Record an income or expense voucher. Amount is positive paise. */
+export const createLedgerEntrySchema = z.object({
+  kind: ledgerKind,
+  accountId: z.string().min(1),
+  categoryId: z.string().optional(),
+  title: z.string().min(1).max(120),
+  person: z.string().max(120).optional(),
+  amount: z.number().int().positive(),
+  mode: expenseMode.default('CASH'),
+  /** ISO date (YYYY-MM-DD); defaults to today. */
+  date: z.string().optional(),
+  note: z.string().max(400).optional(),
+});
+export type CreateLedgerEntryDto = z.infer<typeof createLedgerEntrySchema>;
+
+export const updateLedgerEntrySchema = z.object({
+  accountId: z.string().min(1).optional(),
+  categoryId: z.string().nullable().optional(),
+  title: z.string().min(1).max(120).optional(),
+  person: z.string().max(120).optional(),
+  amount: z.number().int().positive().optional(),
+  mode: expenseMode.optional(),
+  date: z.string().optional(),
+  note: z.string().max(400).optional(),
+});
+export type UpdateLedgerEntryDto = z.infer<typeof updateLedgerEntrySchema>;
+
+export const createAccountSchema = z.object({
+  label: z.string().min(1).max(80),
+  note: z.string().max(160).optional(),
+  openingBalance: z.number().int().default(0),
+});
+export type CreateAccountDto = z.infer<typeof createAccountSchema>;
+
+export const updateAccountSchema = z.object({
+  label: z.string().min(1).max(80).optional(),
+  note: z.string().max(160).optional(),
+  openingBalance: z.number().int().optional(),
+});
+export type UpdateAccountDto = z.infer<typeof updateAccountSchema>;
+
+export const createCategorySchema = z.object({
+  label: z.string().min(1).max(80),
+  kind: ledgerKind.default('EXPENSE'),
+  /** Yearly budget in paise; 0 = no ceiling. */
+  budget: z.number().int().nonnegative().default(0),
+  color: z.string().max(9).optional(),
+});
+export type CreateCategoryDto = z.infer<typeof createCategorySchema>;
+
+export const updateCategorySchema = z.object({
+  label: z.string().min(1).max(80).optional(),
+  kind: ledgerKind.optional(),
+  budget: z.number().int().nonnegative().optional(),
+  color: z.string().max(9).optional(),
+});
+export type UpdateCategoryDto = z.infer<typeof updateCategorySchema>;
+
+export const createVendorSchema = z.object({
+  name: z.string().min(1).max(120),
+  supplies: z.string().max(160).optional(),
+  phone: z.string().max(40).optional(),
+});
+export type CreateVendorDto = z.infer<typeof createVendorSchema>;
+
+export const updateVendorSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  supplies: z.string().max(160).optional(),
+  phone: z.string().max(40).optional(),
+});
+export type UpdateVendorDto = z.infer<typeof updateVendorSchema>;
+
+export const expenseSettingsSchema = z.object({
+  approvalsOn: z.boolean(),
+  categoriesOn: z.boolean(),
+  /** Approval threshold in paise. */
+  approvalLimit: z.number().int().nonnegative(),
+});
+export type ExpenseSettingsDto = z.infer<typeof expenseSettingsSchema>;
+
+// ---------------------------------------------------------------------------
+// Staff & payroll
+// ---------------------------------------------------------------------------
+
+export const staffRole = z.enum(['TEACHER', 'TRANSPORT', 'OFFICE', 'SUPPORT', 'MANAGEMENT', 'VISITING']);
+export type StaffRoleKey = z.infer<typeof staffRole>;
+
+export const leaveType = z.enum(['CASUAL', 'SICK', 'EARNED']);
+export type LeaveTypeKey = z.infer<typeof leaveType>;
+
+export const leaveStatus = z.enum(['PENDING', 'APPROVED', 'REJECTED']);
+export type LeaveStatusKey = z.infer<typeof leaveStatus>;
+
+/** Hire an employee. Salary amounts are paise; server fills sensible defaults. */
+export const createEmployeeSchema = z.object({
+  name: z.string().min(1).max(120),
+  role: staffRole.default('TEACHER'),
+  designation: z.string().max(120).optional(),
+  phone: z.string().max(40).optional(),
+  /** ISO date. */
+  doj: z.string().optional(),
+  basic: z.number().int().nonnegative().default(0),
+  special: z.number().int().nonnegative().default(0),
+  pfEnabled: z.boolean().optional(),
+  esiEnabled: z.boolean().optional(),
+  ptEnabled: z.boolean().optional(),
+  // Transport-only.
+  licence: z.string().max(60).optional(),
+  licExp: z.string().optional(),
+  vehicle: z.string().max(40).optional(),
+  route: z.string().max(60).optional(),
+});
+export type CreateEmployeeDto = z.infer<typeof createEmployeeSchema>;
+
+export const updateEmployeeSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  role: staffRole.optional(),
+  designation: z.string().max(120).optional(),
+  phone: z.string().max(40).optional(),
+  doj: z.string().optional(),
+  basic: z.number().int().nonnegative().optional(),
+  special: z.number().int().nonnegative().optional(),
+  pfEnabled: z.boolean().optional(),
+  esiEnabled: z.boolean().optional(),
+  ptEnabled: z.boolean().optional(),
+  tds: z.number().int().nonnegative().optional(),
+  advance: z.number().int().nonnegative().optional(),
+  licence: z.string().max(60).optional(),
+  licExp: z.string().optional(),
+  vehicle: z.string().max(40).optional(),
+  route: z.string().max(60).optional(),
+  accountName: z.string().max(120).optional(),
+  accountNo: z.string().max(40).optional(),
+  ifsc: z.string().max(20).optional(),
+  docs: z.array(z.string()).optional(),
+});
+export type UpdateEmployeeDto = z.infer<typeof updateEmployeeSchema>;
+
+/** Record a pay raise: bumps basic by `delta` paise and logs it. */
+export const recordRaiseSchema = z.object({
+  delta: z.number().int(),
+  note: z.string().max(120).optional(),
+});
+export type RecordRaiseDto = z.infer<typeof recordRaiseSchema>;
+
+export const markExitSchema = z.object({
+  date: z.string().optional(),
+  reason: z.string().max(120).optional(),
+});
+export type MarkExitDto = z.infer<typeof markExitSchema>;
+
+/** Replace an employee's attendance string for a month ("YYYY-MM"). */
+export const setAttendanceSchema = z.object({
+  employeeId: z.string().min(1),
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  /** One char per day: P/A/L/H. */
+  days: z.string().max(31),
+});
+export type SetAttendanceDto = z.infer<typeof setAttendanceSchema>;
+
+export const createLeaveSchema = z.object({
+  employeeId: z.string().min(1),
+  type: leaveType.default('CASUAL'),
+  days: z.number().int().positive().default(1),
+  fromDate: z.string().optional(),
+  reason: z.string().max(200).optional(),
+});
+export type CreateLeaveDto = z.infer<typeof createLeaveSchema>;
+
+export const decideLeaveSchema = z.object({
+  status: z.enum(['APPROVED', 'REJECTED']),
+});
+export type DecideLeaveDto = z.infer<typeof decideLeaveSchema>;
+
+/** Pay one employee for a month. Server snapshots the computation + posts it. */
+export const payStaffSchema = z.object({
+  employeeId: z.string().min(1),
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  lopDays: z.number().int().nonnegative().default(0),
+  mode: expenseMode.default('BANK'),
+});
+export type PayStaffDto = z.infer<typeof payStaffSchema>;
+
+export const settleExitSchema = z.object({
+  mode: expenseMode.default('BANK'),
+});
+export type SettleExitDto = z.infer<typeof settleExitSchema>;
+
+export const payrollSettingsSchema = z.object({
+  daPercent: z.number().int().min(0).max(100),
+  hraPercent: z.number().int().min(0).max(100),
+  pfPercent: z.number().int().min(0).max(100),
+  ptMonthly: z.number().int().nonnegative(),
+  conveyance: z.number().int().nonnegative(),
+  postToAccounts: z.boolean(),
+});
+export type PayrollSettingsDto = z.infer<typeof payrollSettingsSchema>;
+
+// ---------------------------------------------------------------------------
+// School Setup
+// ---------------------------------------------------------------------------
+
+export const updateSchoolProfileSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  shortCode: z.string().min(1).max(8).optional(),
+  affiliation: z.string().max(60).optional(),
+  board: z.string().max(40).optional(),
+  principalName: z.string().max(120).optional(),
+  phone: z.string().max(40).optional(),
+  email: z.string().max(120).optional(),
+  address: z.string().max(400).optional(),
+});
+export type UpdateSchoolProfileDto = z.infer<typeof updateSchoolProfileSchema>;
+
+export const createSubjectSchema = z.object({
+  name: z.string().min(1).max(60),
+  classIds: z.array(z.string()).optional(),
+});
+export type CreateSubjectDto = z.infer<typeof createSubjectSchema>;
+
+export const updateSubjectSchema = z.object({
+  name: z.string().min(1).max(60).optional(),
+  classIds: z.array(z.string()).optional(),
+});
+export type UpdateSubjectDto = z.infer<typeof updateSubjectSchema>;
+
+export const holidayKind = z.enum(['State holiday', 'National holiday', 'Vacation', 'School holiday']);
+export type HolidayKind = z.infer<typeof holidayKind>;
+
+export const createHolidaySchema = z.object({
+  name: z.string().min(1).max(80),
+  /** ISO date. */
+  date: z.string(),
+  kind: holidayKind.default('School holiday'),
+});
+export type CreateHolidayDto = z.infer<typeof createHolidaySchema>;
+
+// --- Discount rules (School Setup → Discounts) -----------------------------
+
+/** A named concession. PERCENT value = basis points; FLAT value = paise. */
+export const createDiscountRuleSchema = z.object({
+  name: z.string().min(1).max(80),
+  kind: z.enum(['PERCENT', 'FLAT']).default('PERCENT'),
+  value: z.number().int().nonnegative().default(0),
+  /** Fee key it applies to, or "" for the whole invoice. */
+  appliesTo: z.string().max(60).optional(),
+});
+export type CreateDiscountRuleDto = z.infer<typeof createDiscountRuleSchema>;
+
+export const updateDiscountRuleSchema = z.object({
+  name: z.string().min(1).max(80).optional(),
+  kind: z.enum(['PERCENT', 'FLAT']).optional(),
+  value: z.number().int().nonnegative().optional(),
+  appliesTo: z.string().max(60).optional(),
+});
+export type UpdateDiscountRuleDto = z.infer<typeof updateDiscountRuleSchema>;
+
+// --- Student document uploads (S3) -----------------------------------------
+
+/** Request a presigned URL to upload one document file. */
+export const presignDocumentSchema = z.object({
+  docType: z.string().min(1).max(60),
+  fileName: z.string().min(1).max(200),
+  contentType: z.string().max(120).optional(),
+});
+export type PresignDocumentDto = z.infer<typeof presignDocumentSchema>;
+
+/** Record a document after the browser has uploaded it to S3. */
+export const confirmDocumentSchema = z.object({
+  docType: z.string().min(1).max(60),
+  fileName: z.string().min(1).max(200),
+  s3Key: z.string().min(1).max(500),
+  sizeBytes: z.number().int().nonnegative().default(0),
+  contentType: z.string().max(120).optional(),
+});
+export type ConfirmDocumentDto = z.infer<typeof confirmDocumentSchema>;
+
+// --- Document types (school-configurable document checklist) ----------------
+
+export const createDocumentTypeSchema = z.object({
+  name: z.string().min(1).max(60),
+  required: z.boolean().default(false),
+});
+export type CreateDocumentTypeDto = z.infer<typeof createDocumentTypeSchema>;
+
+export const updateDocumentTypeSchema = z.object({
+  name: z.string().min(1).max(60).optional(),
+  required: z.boolean().optional(),
+});
+export type UpdateDocumentTypeDto = z.infer<typeof updateDocumentTypeSchema>;

@@ -90,6 +90,16 @@ export const MODULES: ModuleDef[] = [
     priceMonthly: rupeesPerMonth(499),
   },
   {
+    key: 'staff',
+    name: 'Staff & Payroll',
+    description: 'Employee register, attendance, leave, monthly payroll and payslips.',
+    category: 'operations',
+    icon: 'users',
+    dependsOn: [],
+    core: false,
+    priceMonthly: rupeesPerMonth(899),
+  },
+  {
     key: 'attendance',
     name: 'Attendance',
     description: 'Daily student attendance with parent notifications.',

@@ -127,6 +127,7 @@ export class TenantMiddleware implements NestMiddleware {
       organizationName: org.name,
       academicYearId: year.id,
       academicYearLabel: year.label,
+      academicYearStart: year.startDate.toISOString(),
       currency: org.currency,
       enabledModules,
       moduleConfig,

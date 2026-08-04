@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { formatMoney, paiseToRupees, rupeesToPaise, type PaymentMode } from '@mentivax/core';
-import type { MentivaxClient, Payment, Student } from '@mentivax/api-client';
+import { formatMoney, paiseToRupees, rupeesToPaise, type FeePeriod, type PaymentMode } from '@mentivax/core';
+import type { Invoice, MentivaxClient, Payment, Student } from '@mentivax/api-client';
 import { Icon } from '../components/Icon';
 import { Pagination, usePager } from '../components/Pagination';
 import { StudentPicker } from '../components/StudentPicker';
@@ -82,13 +82,64 @@ function FeesSelect({
   );
 }
 
-/** A single fee due for a student (across their invoices), amounts in paise. */
+/**
+ * A single due unit for a student — one *period* of a fee line (or the whole
+ * line when it isn't period-based). Amounts in paise. Grouping by `lineId`
+ * reconstructs the parent fee; `periodLabel` is null for single-period lines.
+ */
 interface Due {
   key: string;
+  lineId: string;
   feeName: string;
+  period: FeePeriod;
+  periodLabel: string | null;
   total: number;
   paid: number;
   pending: number;
+}
+
+/** Label for one instalment within a period-based line (matches InvoiceBreakdown). */
+function periodLabel(period: FeePeriod, i: number): string {
+  if (period === 'TERM') return `Term ${i + 1}`;
+  if (period === 'MONTHLY') return `Instalment ${i + 1}`;
+  return `Period ${i + 1}`;
+}
+
+/** Plural noun for the instalment-count chip on a fee's parent row. */
+function periodNoun(period: FeePeriod, n: number): string {
+  const word = period === 'TERM' ? 'term' : period === 'MONTHLY' ? 'instalment' : 'period';
+  return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
+/**
+ * Net amount charged per period for each line of an invoice. Periods carry the
+ * *gross* per-instalment split; concessions (per-line, then a whole-invoice one)
+ * are settled earliest-period-first — exactly how InvoiceBreakdown shows them —
+ * so the per-period nets sum to the line's netAmount.
+ */
+function netPeriodsByLine(inv: Invoice): { line: NonNullable<Invoice['lines']>[number]; nets: number[] }[] {
+  const lines = inv.lines ?? [];
+  const perLineHasDiscount = lines.some((l) => l.discountAmount > 0);
+  let wholeRemaining = inv.discountAmount > 0 && !perLineHasDiscount ? inv.discountAmount : 0;
+  return lines.map((l) => {
+    const gross = Array.isArray(l.periods) && l.periods.length ? l.periods : [l.grossAmount];
+    let lineRemaining = l.discountAmount;
+    const nets = gross.map((g) => {
+      let d = 0;
+      if (lineRemaining > 0) {
+        const take = Math.min(lineRemaining, g);
+        d += take;
+        lineRemaining -= take;
+      }
+      if (wholeRemaining > 0) {
+        const take = Math.min(wholeRemaining, g - d);
+        d += take;
+        wholeRemaining -= take;
+      }
+      return g - d;
+    });
+    return { line: l, nets };
+  });
 }
 
 /**
@@ -102,21 +153,31 @@ async function loadDues(api: MentivaxClient, studentId: string): Promise<Due[]> 
   const details = await Promise.all(invoices.map((i) => api.invoices.get(i.id)));
   const dues: Due[] = [];
   for (const inv of details) {
+    // Already-collected money fills the earliest periods first, mirroring how
+    // billing settles a student's ledger — so "Paid" lands on the right terms.
     let remainingPaid = inv.paidAmount;
-    for (const l of inv.lines ?? []) {
-      const paid = Math.min(remainingPaid, l.netAmount);
-      remainingPaid -= paid;
-      dues.push({
-        key: l.id,
-        feeName: l.feeName,
-        total: l.netAmount,
-        paid,
-        pending: Math.max(0, l.netAmount - paid),
+    for (const { line: l, nets } of netPeriodsByLine(inv)) {
+      const multi = nets.length > 1;
+      nets.forEach((amt, i) => {
+        const paid = Math.min(remainingPaid, amt);
+        remainingPaid -= paid;
+        dues.push({
+          key: multi ? `${l.id}:${i}` : l.id,
+          lineId: l.id,
+          feeName: l.feeName,
+          period: l.period,
+          periodLabel: multi ? periodLabel(l.period, i) : null,
+          total: amt,
+          paid,
+          pending: Math.max(0, amt - paid),
+        });
       });
     }
   }
   return dues;
 }
+
+type AllocRow = Due & { payNow: number; balance: number; eligible: boolean };
 
 /** Split the entered amount across the selected fees' pending dues, oldest first. */
 function allocate(dues: Due[], amountPaise: number, selected: Set<string>) {
@@ -167,6 +228,13 @@ export function PaymentsPage() {
 
   return (
     <>
+      <div className="page-head">
+        <div>
+          <h1>Payments</h1>
+          <div className="sub">Counter collections, allocated period by period</div>
+        </div>
+      </div>
+
       <div className="paygrid">
         <button className="paycard inv clickable" onClick={() => setInvOpen(true)}>
           <div className="h">
@@ -265,7 +333,7 @@ export function PaymentsPage() {
                     </button>
                   </td>
                   <td>
-                    <span className="cls">{MODE_LABEL[p.mode]}</span>
+                    <span className={`mode-chip mode-${p.mode.toLowerCase()}`}>{MODE_LABEL[p.mode]}</span>
                   </td>
                   <td style={{ color: 'var(--ink-3)' }}>{p.description ?? '—'}</td>
                   <td className="num">
@@ -355,7 +423,7 @@ function PaymentViewModal({ p, onClose }: { p: Payment; onClose: () => void }) {
         <div className="mb">
           <div className="inv-meta">
             <span className="mono">{p.paidAt.slice(0, 10)}</span>
-            <span className="cls">{MODE_LABEL[p.mode]}</span>
+            <span className={`mode-chip mode-${p.mode.toLowerCase()}`}>{MODE_LABEL[p.mode]}</span>
             {!p.isActive && (
               <span className="tag old">
                 <i />
@@ -403,7 +471,7 @@ const INV_STATUS: Record<string, { cls: string; label: string }> = {
 };
 
 /** Read-only list of every invoice issued, opened from the Total invoiced card. */
-function InvoicesDetailModal({ onClose }: { onClose: () => void }) {
+export function InvoicesDetailModal({ onClose }: { onClose: () => void }) {
   const { api } = useApi();
   const invoices = useAsync(() => api.invoices.list(), []);
   const list = invoices.data ?? [];
@@ -421,8 +489,8 @@ function InvoicesDetailModal({ onClose }: { onClose: () => void }) {
             <Icon name="x" />
           </button>
         </div>
-        <div className="mb" style={{ padding: 0, maxHeight: '62vh', overflowY: 'auto' }}>
-          <div className="card-t" style={{ border: 'none', boxShadow: 'none', borderRadius: 0 }}>
+        <div className="mb" style={{ padding: 0 }}>
+          <div className="card-t" style={{ border: 'none', boxShadow: 'none', borderRadius: 0, minHeight: 0, overflowY: 'auto' }}>
             <table>
               <thead>
                 <tr>
@@ -481,7 +549,7 @@ function InvoicesDetailModal({ onClose }: { onClose: () => void }) {
 }
 
 /** Read-only list of every collected payment, opened from the Collected card. */
-function CollectedDetailModal({ onClose }: { onClose: () => void }) {
+export function CollectedDetailModal({ onClose }: { onClose: () => void }) {
   const { api } = useApi();
   const payments = useAsync(() => api.payments.list(), []);
   const list = payments.data ?? [];
@@ -499,8 +567,8 @@ function CollectedDetailModal({ onClose }: { onClose: () => void }) {
             <Icon name="x" />
           </button>
         </div>
-        <div className="mb" style={{ padding: 0, maxHeight: '62vh', overflowY: 'auto' }}>
-          <div className="card-t" style={{ border: 'none', boxShadow: 'none', borderRadius: 0 }}>
+        <div className="mb" style={{ padding: 0 }}>
+          <div className="card-t" style={{ border: 'none', boxShadow: 'none', borderRadius: 0, minHeight: 0, overflowY: 'auto' }}>
             <table>
               <thead>
                 <tr>
@@ -527,7 +595,7 @@ function CollectedDetailModal({ onClose }: { onClose: () => void }) {
                       {formatMoney(p.amount)}
                     </td>
                     <td>
-                      <span className="cls">{MODE_LABEL[p.mode]}</span>
+                      <span className={`mode-chip mode-${p.mode.toLowerCase()}`}>{MODE_LABEL[p.mode]}</span>
                     </td>
                   </tr>
                 ))}
@@ -550,7 +618,7 @@ function CollectedDetailModal({ onClose }: { onClose: () => void }) {
 }
 
 /** Invoices with an outstanding balance, opened from the Balance due card. */
-function BalanceDueDetailModal({ onClose }: { onClose: () => void }) {
+export function BalanceDueDetailModal({ onClose }: { onClose: () => void }) {
   const { api } = useApi();
   const invoices = useAsync(() => api.invoices.list(), []);
   const due = (invoices.data ?? [])
@@ -570,8 +638,8 @@ function BalanceDueDetailModal({ onClose }: { onClose: () => void }) {
             <Icon name="x" />
           </button>
         </div>
-        <div className="mb" style={{ padding: 0, maxHeight: '62vh', overflowY: 'auto' }}>
-          <div className="card-t" style={{ border: 'none', boxShadow: 'none', borderRadius: 0 }}>
+        <div className="mb" style={{ padding: 0 }}>
+          <div className="card-t" style={{ border: 'none', boxShadow: 'none', borderRadius: 0, minHeight: 0, overflowY: 'auto' }}>
             <table>
               <thead>
                 <tr>
@@ -660,6 +728,21 @@ function RecordPaymentModal({
     () => allocate(dues.data ?? [], rupeesToPaise(amount), selectedFees),
     [dues.data, amount, selectedFees],
   );
+  // Group the flat period rows back under their parent fee line, preserving order.
+  const allocGroups = useMemo(() => {
+    const map = new Map<string, { lineId: string; feeName: string; period: FeePeriod; rows: AllocRow[] }>();
+    const order: string[] = [];
+    for (const r of alloc.rows as AllocRow[]) {
+      let g = map.get(r.lineId);
+      if (!g) {
+        g = { lineId: r.lineId, feeName: r.feeName, period: r.period, rows: [] };
+        map.set(r.lineId, g);
+        order.push(r.lineId);
+      }
+      g.rows.push(r);
+    }
+    return order.map((id) => map.get(id)!);
+  }, [alloc]);
   const showPreview = !editing && !!studentId && (dues.data?.length ?? 0) > 0;
 
   const save = async () => {
@@ -794,30 +877,57 @@ function RecordPaymentModal({
                     </tr>
                   </thead>
                   <tbody>
-                    {alloc.rows.map((r) => (
-                      <tr
-                        key={r.key}
-                        className={`${r.payNow > 0 ? (r.balance === 0 ? 'alloc-full' : 'alloc-part') : ''}${r.eligible ? '' : ' alloc-off'}`}
-                      >
-                        <td>
-                          <b className="alloc-feename" title={r.feeName}>
-                            {r.feeName}
-                          </b>
-                        </td>
-                        <td className="num">{formatMoney(r.total)}</td>
-                        <td className="num muted">{formatMoney(r.paid)}</td>
-                        <td className="num">{formatMoney(r.pending)}</td>
-                        <td
-                          className="num"
-                          style={{ color: r.payNow > 0 ? 'var(--success-ink)' : 'var(--ink-3)', fontWeight: 650 }}
-                        >
-                          {r.payNow > 0 ? formatMoney(r.payNow) : '—'}
-                        </td>
-                        <td className={`num${r.balance > 0 ? ' pending-red' : ' muted'}`}>
-                          {formatMoney(r.balance)}
-                        </td>
-                      </tr>
-                    ))}
+                    {allocGroups.map((g) => {
+                      const multi = g.rows.length > 1;
+                      const agg = g.rows.reduce(
+                        (a, r) => ({
+                          total: a.total + r.total,
+                          paid: a.paid + r.paid,
+                          pending: a.pending + r.pending,
+                          payNow: a.payNow + r.payNow,
+                          balance: a.balance + r.balance,
+                        }),
+                        { total: 0, paid: 0, pending: 0, payNow: 0, balance: 0 },
+                      );
+                      const eligible = g.rows[0]!.eligible;
+                      const parentCls = `${agg.payNow > 0 ? (agg.balance === 0 ? 'alloc-full' : 'alloc-part') : ''}${eligible ? '' : ' alloc-off'}`;
+                      return (
+                        <Fragment key={g.lineId}>
+                          <tr className={parentCls}>
+                            <td>
+                              <b className="alloc-feename" title={g.feeName}>
+                                {g.feeName}
+                              </b>
+                              {multi && <span className="fs-chip" style={{ marginLeft: 8 }}>{periodNoun(g.period, g.rows.length)}</span>}
+                            </td>
+                            <td className="num">{formatMoney(agg.total)}</td>
+                            <td className={`num${agg.paid > 0 ? ' amt-paid' : ' muted'}`}>{agg.paid > 0 ? formatMoney(agg.paid) : '—'}</td>
+                            <td className={`num${agg.pending > 0 ? ' amt-due' : ' muted'}`}>{agg.pending > 0 ? formatMoney(agg.pending) : '—'}</td>
+                            <td className="num" style={{ color: agg.payNow > 0 ? 'var(--success-ink)' : 'var(--ink-3)', fontWeight: 650 }}>
+                              {agg.payNow > 0 ? formatMoney(agg.payNow) : '—'}
+                            </td>
+                            <td className={`num${agg.balance > 0 ? ' pending-red' : ' muted'}`}>
+                              {formatMoney(agg.balance)}
+                            </td>
+                          </tr>
+                          {multi &&
+                            g.rows.map((r) => (
+                              <tr key={r.key} className={`alloc-sub${r.payNow > 0 ? ' alloc-sub-pay' : ''}${eligible ? '' : ' alloc-off'}`}>
+                                <td className="alloc-period">{r.periodLabel}</td>
+                                <td className="num">{formatMoney(r.total)}</td>
+                                <td className={`num${r.paid > 0 ? ' amt-paid' : ' muted'}`}>{r.paid > 0 ? formatMoney(r.paid) : '—'}</td>
+                                <td className={`num${r.pending > 0 ? ' amt-due' : ' muted'}`}>{r.pending > 0 ? formatMoney(r.pending) : '—'}</td>
+                                <td className="num" style={{ color: r.payNow > 0 ? 'var(--success-ink)' : 'var(--ink-4)', fontWeight: 600 }}>
+                                  {r.payNow > 0 ? formatMoney(r.payNow) : '—'}
+                                </td>
+                                <td className={`num${r.balance > 0 ? ' pending-red' : ' muted'}`}>
+                                  {formatMoney(r.balance)}
+                                </td>
+                              </tr>
+                            ))}
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -4,13 +4,19 @@
  */
 import type {
   DiscountType,
+  ExpenseMode,
   FareBasis,
   FeePeriod,
   InvoiceStatus,
   LandmarkFare,
+  LeaveStatusKey,
+  LeaveTypeKey,
+  LedgerKind,
+  LedgerStatus,
   ModuleDef,
   PaymentMode,
   PricingMode,
+  StaffRoleKey,
   TransportShift,
   VehicleType,
 } from '@mentivax/core';
@@ -83,6 +89,9 @@ export interface SchoolClass {
   name: string;
   rank: number;
   studentCount?: number;
+  sections: string[];
+  classTeacherId: string | null;
+  classTeacherName: string | null;
 }
 
 export interface FeeType {
@@ -95,6 +104,8 @@ export interface FeeType {
   periodCount: number;
   /** ISO date for DUE_DATE fees; null otherwise. */
   dueDate?: string | null;
+  /** Flat transport fare (paise) — used only when pricingMode = FLAT. */
+  transportFlatAmount: number;
   rank: number;
 }
 
@@ -117,8 +128,19 @@ export interface Student {
   name: string;
   classId: string;
   className: string;
+  admissionNo: string;
+  admissionType: 'NEW' | 'TRANSFER' | 'READMISSION';
   isNewAdmission: boolean;
+  enrollment: 'APPLICANT' | 'ACTIVE' | 'TC_ISSUED' | 'ALUMNI';
+  documents: string[];
+  exitDate?: string | null;
+  exitReason: string;
+  dateOfBirth?: string | null;
+  emisNo: string;
+  penNo: string;
+  aadhaar: string;
   parentName?: string | null;
+  guardianRelation: string;
   phone?: string | null;
   transportStopId?: string | null;
   transportShift?: TransportShift | null;
@@ -129,6 +151,8 @@ export interface Student {
   feeExempt: boolean;
   discountType: DiscountType;
   discountValue: number;
+  /** Fee key the discount targets, or "" for the whole invoice. */
+  discountFeeKey: string;
   annualFee: number;
   paid: number;
   pending: number;
@@ -199,6 +223,7 @@ export interface GeneratePreviewRow {
   feeExempt: boolean;
   discountType: DiscountType;
   discountValue: number;
+  discountFeeKey: string;
   hasInvoice: boolean;
 }
 
@@ -369,4 +394,358 @@ export interface AdminUser {
     shortCode: string;
     roleName: string;
   }[];
+}
+
+// --- Expenses & accounts ---------------------------------------------------
+
+/** A ledger/book with its live balances for the active year (paise). */
+export interface ExpenseAccount {
+  id: string;
+  label: string;
+  note: string;
+  openingBalance: number;
+  rank: number;
+  /** opening + posted income − posted expense, in range. */
+  closing: number;
+  /** Sum of pending (awaiting-approval) expenses. */
+  awaiting: number;
+}
+
+export interface ExpenseCategory {
+  id: string;
+  label: string;
+  kind: LedgerKind;
+  budget: number;
+  color: string;
+  rank: number;
+  /** Posted amount booked against this category (paise). */
+  used: number;
+}
+
+export interface Vendor {
+  id: string;
+  name: string;
+  supplies: string;
+  phone: string;
+  /** Number of posted expense entries paid to this vendor. */
+  bills: number;
+  /** Posted expenses paid to this vendor (paise). */
+  paid: number;
+  /** Pending expenses to this vendor (paise). */
+  due: number;
+}
+
+/** One income/expense voucher. Amount is positive paise; sign from `kind`. */
+export interface LedgerEntry {
+  id: string;
+  kind: LedgerKind;
+  accountId: string;
+  accountLabel: string;
+  categoryId: string | null;
+  categoryLabel: string | null;
+  voucherNo: string;
+  date: string;
+  title: string;
+  person: string;
+  amount: number;
+  mode: ExpenseMode;
+  note: string;
+  status: LedgerStatus;
+  signed: boolean;
+}
+
+export interface ExpenseSettings {
+  approvalsOn: boolean;
+  categoriesOn: boolean;
+  approvalLimit: number;
+}
+
+/** Day-book overview: books, KPIs, and the entry list, all for the active year. */
+export interface ExpenseOverview {
+  accounts: ExpenseAccount[];
+  settings: ExpenseSettings;
+  income: number;
+  expense: number;
+  awaiting: number;
+  closing: number;
+}
+
+/** A single row of the running account statement. */
+export interface StatementRow {
+  id: string;
+  date: string;
+  voucherNo: string;
+  title: string;
+  person: string;
+  credit: number;
+  debit: number;
+  balance: number;
+}
+
+export interface AccountStatement {
+  opening: number;
+  closing: number;
+  rows: StatementRow[];
+}
+
+/** Expense reports for the active year. */
+export interface ExpenseReport {
+  spent: number;
+  income: number;
+  net: number;
+  awaiting: number;
+  overBudget: number;
+  byCategory: { label: string; color: string; kind: LedgerKind; amount: number; budget: number }[];
+  byPayee: { name: string; amount: number }[];
+  byMonth: { month: string; income: number; expense: number }[];
+}
+
+// --- Staff & payroll -------------------------------------------------------
+
+/** An increment/raise record on an employee. */
+export interface Increment {
+  date: string;
+  note: string;
+  delta: number;
+}
+
+export interface Employee {
+  id: string;
+  code: string;
+  name: string;
+  role: StaffRoleKey;
+  designation: string;
+  phone: string;
+  doj: string;
+  basic: number;
+  special: number;
+  pfEnabled: boolean;
+  esiEnabled: boolean;
+  ptEnabled: boolean;
+  tds: number;
+  advance: number;
+  clBalance: number;
+  slBalance: number;
+  elBalance: number;
+  licence: string | null;
+  licExp: string | null;
+  vehicle: string | null;
+  route: string | null;
+  accountName: string;
+  accountNo: string;
+  ifsc: string;
+  docs: string[];
+  increments: Increment[];
+  status: 'ACTIVE' | 'EXITED';
+  exitDate: string | null;
+  exitReason: string | null;
+  exitSettled: boolean;
+  // --- derived (server-computed, full month, 0 LOP) ---
+  gross: number;
+  net: number;
+  /** True once a payslip exists for the current pay month. */
+  paidThisMonth: boolean;
+  paidMode: ExpenseMode | null;
+}
+
+export interface LeaveRequestView {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  type: LeaveTypeKey;
+  days: number;
+  fromDate: string;
+  reason: string;
+  status: LeaveStatusKey;
+}
+
+/** One month of attendance for one employee. */
+export interface AttendanceRow {
+  employeeId: string;
+  employeeName: string;
+  code: string;
+  role: StaffRoleKey;
+  days: string;
+  present: number;
+  absent: number;
+  leave: number;
+}
+
+export interface AttendanceMonth {
+  month: string;
+  dayCount: number;
+  sundays: number[];
+  rows: AttendanceRow[];
+}
+
+/** A processed payslip (snapshotted). */
+export interface Payslip {
+  id: string;
+  payslipNo: string;
+  employeeId: string;
+  employeeName: string;
+  code: string;
+  designation: string;
+  month: string;
+  paidAt: string;
+  mode: ExpenseMode;
+  lopDays: number;
+  payableDays: number;
+  basic: number;
+  da: number;
+  hra: number;
+  conveyance: number;
+  special: number;
+  gross: number;
+  lop: number;
+  pf: number;
+  esi: number;
+  pt: number;
+  tds: number;
+  advanceRecovered: number;
+  deductionsTotal: number;
+  net: number;
+  amountInWords: string;
+}
+
+/** One row of the Pay-staff table (live figures for the pay month). */
+export interface PayrollRow {
+  employeeId: string;
+  name: string;
+  code: string;
+  role: StaffRoleKey;
+  gross: number;
+  lopDays: number;
+  lop: number;
+  deductions: number;
+  net: number;
+  paid: boolean;
+  mode: ExpenseMode | null;
+  payslipNo: string | null;
+}
+
+export interface PayrollOverview {
+  month: string;
+  postToAccounts: boolean;
+  rows: PayrollRow[];
+  stillToPay: number;
+  paid: number;
+}
+
+/** Exit / full-and-final row. */
+export interface ExitRow {
+  employeeId: string;
+  name: string;
+  code: string;
+  role: StaffRoleKey;
+  lastDay: string | null;
+  reason: string | null;
+  lastNet: number;
+  encashment: number;
+  advance: number;
+  amount: number;
+  settled: boolean;
+}
+
+export interface StaffSummary {
+  headcount: number;
+  monthlyBill: number;
+  paidThisMonth: number;
+  toPayCount: number;
+  teacherCount: number;
+  transportCount: number;
+}
+
+export interface PayrollSettingsView {
+  daPercent: number;
+  hraPercent: number;
+  pfPercent: number;
+  ptMonthly: number;
+  conveyance: number;
+  postToAccounts: boolean;
+}
+
+// --- School Setup ----------------------------------------------------------
+
+export interface SchoolProfile {
+  name: string;
+  shortCode: string;
+  affiliation: string;
+  board: string;
+  principalName: string;
+  phone: string;
+  email: string;
+  address: string;
+}
+
+export interface Subject {
+  id: string;
+  name: string;
+  classIds: string[];
+  rank: number;
+}
+
+export interface Holiday {
+  id: string;
+  name: string;
+  date: string;
+  kind: string;
+}
+
+/** Setup completion snapshot: which essential steps are done. */
+export interface SetupOverview {
+  profile: boolean;
+  year: boolean;
+  classes: boolean;
+  subjects: boolean;
+  staff: boolean;
+  fees: boolean;
+  doneMusts: number;
+  totalMusts: number;
+}
+
+/** A named concession defined in School Setup → Discounts. */
+export interface DiscountRule {
+  id: string;
+  name: string;
+  kind: 'PERCENT' | 'FLAT';
+  /** PERCENT: basis points (1000 = 10%); FLAT: paise. */
+  value: number;
+  /** Fee key it applies to, or "" for the whole invoice. */
+  appliesTo: string;
+  rank: number;
+}
+
+/** One standard's promotion mapping in a year rollover. */
+export interface RolloverRow {
+  classId: string;
+  className: string;
+  /** Next standard students move to, or null when they graduate (become alumni). */
+  nextClassId: string | null;
+  nextClassName: string | null;
+  count: number;
+}
+
+/** An uploaded student document file (stored in S3). */
+export interface StudentDocument {
+  id: string;
+  docType: string;
+  fileName: string;
+  sizeBytes: number;
+  contentType: string;
+  uploadedAt: string;
+}
+
+export interface StudentDocumentList {
+  /** False when the server has no S3 storage configured. */
+  configured: boolean;
+  files: StudentDocument[];
+}
+
+/** A document the school collects (configurable checklist). */
+export interface DocumentType {
+  id: string;
+  name: string;
+  required: boolean;
+  rank: number;
 }

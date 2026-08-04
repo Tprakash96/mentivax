@@ -29,6 +29,7 @@ type StudentRow = {
   feeExempt: boolean;
   discountType: DiscountType;
   discountValue: number;
+  discountFeeKey: string;
 };
 
 const STUDENT_SELECT = {
@@ -41,6 +42,7 @@ const STUDENT_SELECT = {
   feeExempt: true,
   discountType: true,
   discountValue: true,
+  discountFeeKey: true,
 } as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -72,6 +74,7 @@ export interface GeneratePreviewRow {
   feeExempt: boolean;
   discountType: DiscountType;
   discountValue: number;
+  discountFeeKey: string;
   hasInvoice: boolean;
 }
 
@@ -105,16 +108,28 @@ export class InvoiceGenerationService {
       ? landmarks.find((l) => l.name === student.transportLandmark)
       : undefined;
 
-    // Distance-based fares (org setting): fare = distance (km) × per-km rate.
-    const settings = await this.prisma.transportSetting.findUnique({
-      where: { organizationId: t.organizationId },
-    });
+    // The school's transport fee head (if defined) drives the fare basis and the
+    // line name; otherwise fall back to the org transport setting.
+    const [transportFee, settings] = await Promise.all([
+      this.prisma.feeType.findFirst({
+        where: { organizationId: t.organizationId, pricingMode: { in: ['STOP', 'DISTANCE', 'FLAT'] } },
+        orderBy: { rank: 'asc' },
+      }),
+      this.prisma.transportSetting.findUnique({ where: { organizationId: t.organizationId } }),
+    ]);
+    const basis = transportFee?.pricingMode ?? settings?.fareBasis ?? 'STOP';
+
     let bothWayFare = lm?.bothWayFare ?? stop.bothWayFare;
     let oneWayFare = lm?.oneWayFare ?? stop.oneWayFare;
-    if (settings?.fareBasis === 'DISTANCE') {
+    if (basis === 'FLAT') {
+      // One flat fare for every rider, regardless of stop/distance.
+      bothWayFare = transportFee?.transportFlatAmount ?? 0;
+      oneWayFare = transportFee?.transportFlatAmount ?? 0;
+    } else if (basis === 'DISTANCE') {
+      // fare = distance (km) × per-km rate (rates live in the transport setting).
       const km = lm?.distanceKm ?? 0;
-      bothWayFare = Math.round(km * settings.ratePerKmBoth);
-      oneWayFare = Math.round(km * settings.ratePerKmOne);
+      bothWayFare = Math.round(km * (settings?.ratePerKmBoth ?? 0));
+      oneWayFare = Math.round(km * (settings?.ratePerKmOne ?? 0));
     }
 
     return {
@@ -127,35 +142,54 @@ export class InvoiceGenerationService {
         landmarkName: lm?.name,
       },
       shift: student.transportShift,
+      headName: transportFee?.name,
     };
   }
 
   /**
    * Build (not persist) an invoice for a student, or null if nothing billable.
-   * The student's discount applies at the invoice level (lines stay at gross).
+   *
+   * A concession is scoped by `discountFeeKey`: when set, the discount is
+   * computed on **that fee head's gross alone** and recorded on that fee's line
+   * (so a 50% concession on School Fee is 50% of School Fee, never touching
+   * Store or Transport). With no key ("") it stays a whole-invoice discount.
    */
   private async buildFor(t: TenantContext, student: StudentRow) {
     const fees = await this.feeStructure.getInputs(t, student.classId);
     const transport = await this.transportFor(t, student);
     const lines = buildInvoiceLines(fees, { isNewAdmission: student.isNewAdmission }, transport);
     if (lines.length === 0) return null;
-    const lineData = lines.map((l) => ({
-      feeKey: l.key,
-      feeName: l.name,
-      period: l.period,
-      grossAmount: l.gross,
-      discountType: 'NONE' as const,
-      discountValue: 0,
-      discountAmount: 0,
-      netAmount: l.gross,
-      periods: l.periods,
-    }));
+
     const gross = invoiceTotals(lines).gross;
     const transportGross = lines
       .filter((l) => l.key === TRANSPORT_FEE_KEY)
       .reduce((a, l) => a + l.gross, 0);
     const academicGross = gross - transportGross;
-    const discount = computeDiscount(gross, student.discountType, student.discountValue);
+
+    // Fee head the discount targets (from the concession). "" = whole invoice.
+    const targetKey = student.discountFeeKey || '';
+    const targetGross = targetKey
+      ? lines.filter((l) => l.key === targetKey).reduce((a, l) => a + l.gross, 0)
+      : gross;
+    const discount = computeDiscount(targetGross, student.discountType, student.discountValue);
+
+    const lineData = lines.map((l) => {
+      // A targeted discount is booked against its own fee line; an untargeted
+      // (whole-invoice) discount stays at the invoice level (lines at gross).
+      const onThisLine = targetKey !== '' && discount > 0 && l.key === targetKey;
+      return {
+        feeKey: l.key,
+        feeName: l.name,
+        period: l.period,
+        grossAmount: l.gross,
+        discountType: onThisLine ? student.discountType : ('NONE' as const),
+        discountValue: onThisLine ? student.discountValue : 0,
+        discountAmount: onThisLine ? discount : 0,
+        netAmount: onThisLine ? Math.max(0, l.gross - discount) : l.gross,
+        periods: l.periods,
+      };
+    });
+
     const net = Math.max(0, gross - discount);
     return { lineData, gross, academicGross, transportGross, discount, net };
   }
@@ -303,10 +337,12 @@ export class InvoiceGenerationService {
       scope,
     );
 
-    const startYear = Number.parseInt(t.academicYearLabel, 10) || 2026;
+    const ayStart = t.academicYearStart ? new Date(t.academicYearStart) : null;
+    const startYear = ayStart ? ayStart.getUTCFullYear() : Number.parseInt(t.academicYearLabel, 10) || 2026;
+    const startMonth = ayStart ? ayStart.getUTCMonth() : 3;
     const rows: InvoicePeriodRow[] = [];
     for (const l of lines) {
-      const { labels } = periodMeta({ period: l.period, periodCount: l.periods.length }, startYear);
+      const { labels } = periodMeta({ period: l.period, periodCount: l.periods.length }, startYear, startMonth);
       l.periods.forEach((amount, i) => {
         rows.push({ feeKey: l.key, feeName: l.name, period: labels[i] ?? `Period ${i + 1}`, amount });
       });
@@ -345,6 +381,7 @@ export class InvoiceGenerationService {
         feeExempt: s.feeExempt,
         discountType: s.discountType,
         discountValue: s.discountValue,
+        discountFeeKey: s.discountFeeKey,
         hasInvoice: invoiced.has(s.id),
       });
     }
@@ -371,6 +408,9 @@ export class InvoiceGenerationService {
               feeExempt: adj.feeExempt,
               discountType: adj.discountType,
               discountValue: adj.discountValue,
+              // Only overwrite the fee target when the client sends one, so a
+              // concession set at admission isn't silently reset to whole-invoice.
+              ...(adj.discountFeeKey !== undefined ? { discountFeeKey: adj.discountFeeKey } : {}),
             },
           }),
         ),

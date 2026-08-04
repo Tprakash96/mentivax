@@ -1,0 +1,8 @@
+-- AlterTable
+ALTER TABLE "Student" ADD COLUMN     "aadhaar" TEXT NOT NULL DEFAULT '',
+ADD COLUMN     "admissionNo" TEXT NOT NULL DEFAULT '',
+ADD COLUMN     "admissionType" TEXT NOT NULL DEFAULT 'NEW',
+ADD COLUMN     "dateOfBirth" TIMESTAMP(3),
+ADD COLUMN     "emisNo" TEXT NOT NULL DEFAULT '',
+ADD COLUMN     "guardianRelation" TEXT NOT NULL DEFAULT '',
+ADD COLUMN     "penNo" TEXT NOT NULL DEFAULT '';

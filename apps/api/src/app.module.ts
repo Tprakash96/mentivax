@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
+import { StorageModule } from './storage/storage.module';
 import { TenantMiddleware } from './tenant/tenant.middleware';
 import { HealthController } from './health.controller';
 import { AuthModule } from './auth/auth.module';
@@ -20,10 +21,14 @@ import { PaymentsModule } from './payments/payments.module';
 import { ModulesModule } from './modules/modules.module';
 import { TransportModule } from './transport/transport.module';
 import { FinancialYearsModule } from './financial-years/financial-years.module';
+import { ExpensesModule } from './expenses/expenses.module';
+import { StaffModule } from './staff/staff.module';
+import { SetupModule } from './setup/setup.module';
 
 @Module({
   imports: [
     PrismaModule,
+    StorageModule,
     AuthModule,
     RbacModule,
     AdminModule,
@@ -38,6 +43,9 @@ import { FinancialYearsModule } from './financial-years/financial-years.module';
     PaymentsModule,
     TransportModule,
     FinancialYearsModule,
+    ExpensesModule,
+    StaffModule,
+    SetupModule,
   ],
   controllers: [HealthController],
   providers: [

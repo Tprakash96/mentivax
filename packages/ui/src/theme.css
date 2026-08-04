@@ -1,82 +1,145 @@
-/* Mentivax theme — the official brand design system (mentivax.com), theme-aware.
- * The accent tokens keep their historical `--green*` names but now hold the
- * brand BLUE (#2563EB), so every primary button / active state is on-brand.
- * `--success*` carries the actual green (paid status, positive amounts). */
+/* Mentivax design system — from the School ERP handoff (high fidelity).
+ * One blue accent (#2450E0) everywhere; green/amber/red carry MEANING only.
+ * Historical token names are kept (e.g. --green* = primary blue) so the whole
+ * app reskins at once. IBM Plex Mono carries every figure; Instrument Sans UI. */
 :root {
   color-scheme: light;
-  --paper: #eef3fb;
+  /* Surfaces */
+  --canvas: #f4f7fd; /* page background (dot-grid washes applied on the shell) */
+  --paper: #fafbfd; /* surface tint — table headers, inset panels, chips */
   --card: #ffffff;
-  --hover: #f4f7fd;
-  --ink: #10192b;
-  --ink-2: #4a5568;
-  --ink-3: #8a93a6;
-  --line: #dce4f0;
-  --line-2: #cdd8ec;
+  --hover: #fafbfe; /* table row hover */
 
-  /* Primary accent (brand blue) */
-  --green: #2563eb;
-  --green-ink: #1d4ed8;
-  --green-soft: #eaf0fe;
-  --green-line: #c7d9fb;
+  /* Ink scale */
+  --ink: #16233f; /* primary text */
+  --ink-deep: #0e1d42; /* page titles, card headings */
+  --ink-2: #3a4560; /* secondary text */
+  --ink-3: #55617a; /* table body / small labels */
+  --ink-4: #7c889f; /* captions, subtitles */
+  --ink-5: #98a3b8; /* placeholder, mono meta */
+  --ink-6: #b3bccc; /* disabled, empty markers */
 
-  /* Success (brand green) */
-  --success: #1e9e6a;
-  --success-ink: #157552;
-  --success-soft: #e3f5ed;
+  /* Lines */
+  --line: #e4e9f2; /* card borders */
+  --line-soft: #edf0f6; /* inner dividers, header rules */
+  --line-row: #f2f5fa; /* table row dividers */
+  --line-2: #dfe5ef; /* field border, secondary buttons */
 
-  --amber: #b26b00;
-  --amber-soft: #fcf0dc;
-  --amber-line: #f3dcb0;
-  --red: #d9483b;
-  --red-soft: #fceae8;
-  --blue: #2563eb;
-  --blue-soft: #eaf0fe;
-  --violet: #6d45c9;
-  --violet-soft: #efe9fb;
+  /* Primary accent (blue) — kept under the historical --green* names */
+  --green: #2450e0;
+  --green-ink: #1b3ecc;
+  --green-soft: #eef3ff;
+  --green-line: #c3d6fb;
+  --primary-tint2: #e4edff; /* badge / icon-tile fill */
 
-  --r: 10px;
-  --r-lg: 16px;
-  --sh: 0 1px 2px rgba(16, 25, 43, 0.05), 0 4px 14px rgba(16, 25, 43, 0.05);
-  --sh-lg: 0 12px 34px rgba(16, 25, 43, 0.14);
-  --primary-glow: 0 2px 12px rgba(37, 99, 235, 0.3);
+  /* Success — money in / paid / on */
+  --success: #12a87a; /* dot */
+  --success-ink: #0b7a5a; /* text */
+  --success-deep: #0b5f48;
+  --success-soft: #e8f6f0;
+  --success-line: #cbebdd;
 
-  --ui: 'DM Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --display: 'Space Grotesk', 'DM Sans', system-ui, sans-serif;
-  --mono: 'DM Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  /* Warning — pending / awaiting approval */
+  --amber: #8a5a00; /* text */
+  --amber-dot: #e8792b;
+  --amber-soft: #fef4e2;
+  --amber-line: #f6dfbb;
+
+  /* Danger — delete / absent / money out */
+  --red: #b3261e; /* text */
+  --red-fig: #c2410c; /* figures (money out / over budget) */
+  --red-soft: #fdecec;
+  --red-line: #f3c9c9;
+
+  /* Data-label hues (staff category chips) */
+  --blue: #2450e0;
+  --blue-soft: #e4edff;
+  --violet: #6d28d9;
+  --violet-soft: #f1ebfe;
+
+  /* The one rich surface — navy sidebar rail + attention band */
+  --navy: linear-gradient(168deg, #16233f 0%, #1d2e5c 55%, #24357a 100%);
+  --navy-band: linear-gradient(122deg, #16233f 0%, #1d2e5c 58%, #24357a 100%);
+  --navy-solid: #16233f;
+  /* Figures on navy use the light status set */
+  --navy-amber: #ffc24b;
+  --navy-coral: #ff9f6b;
+  --navy-sky: #93b4ff;
+  --navy-mint: #7adfb8;
+
+  /* Primary CTA gradient */
+  --cta: linear-gradient(135deg, #3d6bff 0%, #1b3ecc 100%);
+
+  /* Radii */
+  --r: 10px; /* buttons / inputs */
+  --r-lg: 16px; /* page cards */
+  --r-inner: 14px; /* inner cards */
+  --r-modal: 18px;
+  --r-chip: 9px;
+
+  /* Elevation */
+  --sh: 0 1px 2px rgba(14, 29, 66, 0.05); /* card resting */
+  --sh-lg: 0 20px 38px -26px rgba(36, 80, 224, 0.65); /* card hover */
+  --sh-modal: 0 26px 80px rgba(15, 27, 52, 0.3);
+  --sh-navy: 0 20px 44px -28px rgba(14, 29, 66, 0.7);
+  --primary-glow: 0 8px 18px -10px rgba(36, 80, 224, 0.7); /* CTA shadow */
+
+  --ui: 'Instrument Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --display: 'Instrument Sans', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 
-/* Dark navy — the landing-page surface palette (#0F1B34 / #17233F). */
+/* Dark navy — kept for the theme toggle (the handoff itself is light-only). */
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --paper: #0f1b34;
+  --canvas: #0d1730;
+  --paper: #172341;
   --card: #17233f;
   --hover: #1e2c4a;
   --ink: #eef3fb;
+  --ink-deep: #f4f7fd;
   --ink-2: #b9c3d9;
-  --ink-3: #8090ad;
+  --ink-3: #8b98b4;
+  --ink-4: #8090ad;
+  --ink-5: #6f7d9a;
+  --ink-6: #566285;
   --line: #26355a;
+  --line-soft: #223056;
+  --line-row: #1e2c4a;
   --line-2: #32446e;
 
-  --green: #3b82f6;
-  --green-ink: #93b4fb;
+  --green: #4d7bff;
+  --green-ink: #9bb8ff;
   --green-soft: #1c2c4e;
   --green-line: #2e4675;
+  --primary-tint2: #1c2c4e;
 
   --success: #34c58a;
   --success-ink: #7fe0bc;
+  --success-deep: #a6ecd0;
   --success-soft: #16311f;
+  --success-line: #2e5a49;
 
   --amber: #f6b44d;
+  --amber-dot: #f6b44d;
   --amber-soft: #38290f;
   --amber-line: #574012;
   --red: #f1786b;
+  --red-fig: #ff9f6b;
   --red-soft: #3a1f1c;
-  --blue: #3b82f6;
+  --red-line: #5a2e2b;
+  --blue: #4d7bff;
   --blue-soft: #1c2c4e;
   --violet: #a98bec;
   --violet-soft: #2a2246;
 
+  --navy: linear-gradient(168deg, #17233f 0%, #1d2e5c 55%, #24357a 100%);
+  --navy-band: linear-gradient(122deg, #17233f 0%, #1d2e5c 58%, #24357a 100%);
+  --navy-solid: #17233f;
+
   --sh: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.35);
   --sh-lg: 0 16px 42px rgba(0, 0, 0, 0.5);
-  --primary-glow: 0 2px 14px rgba(59, 130, 246, 0.45);
+  --sh-modal: 0 26px 80px rgba(0, 0, 0, 0.6);
+  --sh-navy: 0 20px 44px -28px rgba(0, 0, 0, 0.7);
+  --primary-glow: 0 8px 18px -10px rgba(77, 123, 255, 0.6);
 }

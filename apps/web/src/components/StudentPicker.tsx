@@ -55,7 +55,8 @@ export function StudentPicker({
             s.className.toLowerCase().includes(q),
         )
       : students;
-    return arr.slice(0, 8);
+    // Cap the list for performance; the menu scrolls to reach the rest.
+    return arr.slice(0, 50);
   }, [students, query]);
 
   // Reset the highlight to the top whenever the filtered list changes.

@@ -134,24 +134,35 @@ function AcademicMapping() {
               <tbody>
                 {amounts.map((r) => {
                   const split = r.pricingMode === 'SPLIT';
+                  const transport = r.pricingMode === 'STOP' || r.pricingMode === 'DISTANCE' || r.pricingMode === 'FLAT';
                   return (
                     <tr key={r.feeTypeId}>
                       <td><b>{r.name}</b></td>
                       <td><span className="fs-chip">{durationLabel(r.period, r.periodCount, r.dueDate)}</span></td>
-                      <td className="num">
-                        <input
-                          type="number"
-                          value={paiseToRupees(split ? r.newAmount : r.flatAmount)}
-                          onChange={(e) => setAmount(r.feeTypeId, split ? 'newAmount' : 'flatAmount', Number(e.target.value))}
-                        />
-                      </td>
-                      <td className="num">
-                        {split ? (
-                          <input type="number" value={paiseToRupees(r.oldAmount)} onChange={(e) => setAmount(r.feeTypeId, 'oldAmount', Number(e.target.value))} />
-                        ) : (
-                          <span className="muted">—</span>
-                        )}
-                      </td>
+                      {transport ? (
+                        <td className="num muted" colSpan={2} style={{ textAlign: 'left' }}>
+                          Priced by transport —{' '}
+                          {r.pricingMode === 'STOP' ? 'the student’s stop fare' : r.pricingMode === 'DISTANCE' ? '₹/km × distance' : 'a flat fare'}
+                          . Set under <b>Transport</b>.
+                        </td>
+                      ) : (
+                        <>
+                          <td className="num">
+                            <input
+                              type="number"
+                              value={paiseToRupees(split ? r.newAmount : r.flatAmount)}
+                              onChange={(e) => setAmount(r.feeTypeId, split ? 'newAmount' : 'flatAmount', Number(e.target.value))}
+                            />
+                          </td>
+                          <td className="num">
+                            {split ? (
+                              <input type="number" value={paiseToRupees(r.oldAmount)} onChange={(e) => setAmount(r.feeTypeId, 'oldAmount', Number(e.target.value))} />
+                            ) : (
+                              <span className="muted">—</span>
+                            )}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   );
                 })}

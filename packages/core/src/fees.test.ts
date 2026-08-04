@@ -8,8 +8,43 @@ import {
   resolveTransportFare,
   invoiceTotals,
   deriveStatus,
+  periodMeta,
+  periodBreakdown,
+  academicYearMonths,
 } from './fees';
 import type { FeeStructureInput, TransportFareInput } from './types';
+
+describe('period labels vs. the academic-year start', () => {
+  const monthly = { period: 'MONTHLY' as const, periodCount: 12 };
+
+  it('defaults to an April-starting year (Apr … Mar)', () => {
+    const { labels } = periodMeta(monthly, 2026);
+    expect(labels[0]).toBe('Apr 2026');
+    expect(labels[9]).toBe('Jan 2027');
+    expect(labels[11]).toBe('Mar 2027');
+  });
+
+  it('rolls from a March-starting year (15 Mar → 14 Mar): Mar … Feb', () => {
+    // startMonth 2 = March
+    const { labels } = periodMeta(monthly, 2026, 2);
+    expect(labels[0]).toBe('Mar 2026');
+    expect(labels[10]).toBe('Jan 2027');
+    expect(labels[11]).toBe('Feb 2027');
+    expect(labels).toHaveLength(12); // never 13
+  });
+
+  it('splits the amount by installment count, independent of the date span', () => {
+    // ₹12,000 / 12 = ₹1,000 each, whatever the exact start/end days are.
+    expect(periodBreakdown({ ...monthly } as FeeStructureInput, 1_200_000)).toEqual(
+      Array.from({ length: 12 }, () => 100_000),
+    );
+  });
+
+  it('counts a 15 Mar 2026 → 14 Mar 2027 year as 12 whole months, not 13', () => {
+    expect(academicYearMonths('2026-03-15', '2027-03-14')).toBe(12);
+    expect(academicYearMonths('2026-04-01', '2027-03-31')).toBe(12);
+  });
+});
 
 const yearFee: FeeStructureInput = {
   key: 'year', name: 'School Fee', period: 'TERM', pricingMode: 'SPLIT',

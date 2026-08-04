@@ -1,8 +1,10 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import {
   createStudentSchema,
+  updateStudentSchema,
   updateStudentTransportSchema,
   type CreateStudentDto,
+  type UpdateStudentDto,
   type UpdateStudentTransportDto,
 } from '@mentivax/core';
 import { ZodBody } from '../common/zod-body.pipe';
@@ -21,9 +23,23 @@ export class StudentsController {
     @Tenant() t: TenantContext,
     @Query('classId') classId?: string,
     @Query('status') status?: string,
+    @Query('enrollment') enrollment?: string,
     @Query('search') search?: string,
   ) {
-    return this.service.list(t, { classId, status, search });
+    return this.service.list(t, { classId, status, enrollment, search });
+  }
+
+  // Rollover routes are declared before `:id` so they aren't shadowed by it.
+  @Get('rollover/preview')
+  @RequirePermissions('students:read')
+  rolloverPreview(@Tenant() t: TenantContext) {
+    return this.service.rolloverPreview(t);
+  }
+
+  @Post('rollover')
+  @RequirePermissions('students:write')
+  rollover(@Tenant() t: TenantContext) {
+    return this.service.rollover(t);
   }
 
   @Get(':id')
@@ -36,6 +52,16 @@ export class StudentsController {
   @RequirePermissions('students:write')
   create(@Tenant() t: TenantContext, @Body(new ZodBody(createStudentSchema)) dto: CreateStudentDto) {
     return this.service.create(t, dto);
+  }
+
+  @Patch(':id')
+  @RequirePermissions('students:write')
+  update(
+    @Tenant() t: TenantContext,
+    @Param('id') id: string,
+    @Body(new ZodBody(updateStudentSchema)) dto: UpdateStudentDto,
+  ) {
+    return this.service.update(t, id, dto);
   }
 
   /** Assign or clear a student's transport stop + shift. */
