@@ -102,7 +102,7 @@ export class PaymentsService {
           amount: dto.amount,
           mode: dto.mode,
           description: dto.description,
-          allocations: { create: allocations!.map((a) => ({ invoiceId: a.invoiceId, amount: a.amount })) },
+          allocations: { create: allocations!.map((a) => ({ invoiceId: a.invoiceId, lineId: a.lineId ?? null, amount: a.amount })) },
         },
         include: { student: { select: { name: true } } },
       });
@@ -194,24 +194,27 @@ export class PaymentsService {
       }
       await tx.paymentAllocation.deleteMany({ where: { paymentId: id } });
 
-      // 2. Re-allocate the new amount to the student's oldest open invoices.
-      const open = await tx.invoice.findMany({
-        where: {
-          organizationId: t.organizationId,
-          studentId: payment.studentId,
-          status: { in: ['PENDING', 'PARTIAL'] },
-        },
-        orderBy: { dueDate: 'asc' },
-      });
-      const allocations: { invoiceId: string; amount: number }[] = [];
-      let remaining = dto.amount;
-      for (const inv of open) {
-        if (remaining <= 0) break;
-        const owed = Math.max(0, inv.netAmount - inv.paidAmount);
-        const apply = Math.min(owed, remaining);
-        if (apply > 0) {
-          allocations.push({ invoiceId: inv.id, amount: apply });
-          remaining -= apply;
+      // 2. Re-allocate: an explicit manual split, else oldest invoice first.
+      let allocations: { invoiceId: string; lineId?: string; amount: number }[] = dto.allocations ?? [];
+      if (allocations.length === 0) {
+        const open = await tx.invoice.findMany({
+          where: {
+            organizationId: t.organizationId,
+            studentId: payment.studentId,
+            status: { in: ['PENDING', 'PARTIAL'] },
+          },
+          orderBy: { dueDate: 'asc' },
+        });
+        allocations = [];
+        let remaining = dto.amount;
+        for (const inv of open) {
+          if (remaining <= 0) break;
+          const owed = Math.max(0, inv.netAmount - inv.paidAmount);
+          const apply = Math.min(owed, remaining);
+          if (apply > 0) {
+            allocations.push({ invoiceId: inv.id, amount: apply });
+            remaining -= apply;
+          }
         }
       }
       for (const a of allocations) {
@@ -231,7 +234,7 @@ export class PaymentsService {
           mode: dto.mode,
           description: dto.description ?? null,
           paidAt: dto.paidAt ? new Date(dto.paidAt) : payment.paidAt,
-          allocations: { create: allocations.map((a) => ({ invoiceId: a.invoiceId, amount: a.amount })) },
+          allocations: { create: allocations.map((a) => ({ invoiceId: a.invoiceId, lineId: a.lineId ?? null, amount: a.amount })) },
         },
         include: { student: { select: { name: true } } },
       });
@@ -270,16 +273,18 @@ export class PaymentsService {
       });
       if (!inv) continue;
 
-      // Flatten the invoice into ordered period slots (fee × period).
+      // Flatten into ordered period slots. A line-targeted allocation only fills
+      // its own fee's periods; a whole-invoice one fills every fee oldest-first.
+      const scopedLines = alloc.lineId ? inv.lines.filter((l) => l.id === alloc.lineId) : inv.lines;
       const slots: { feeName: string; label: string; amount: number }[] = [];
-      for (const l of inv.lines) {
+      for (const l of scopedLines) {
         const periods = Array.isArray(l.periods) ? (l.periods as number[]) : [l.netAmount];
         periods.forEach((amt, i) => slots.push({ feeName: l.feeName, label: periodLabel(l.period, i, periods.length), amount: amt }));
       }
 
-      // How much was paid on this invoice by payments BEFORE this one.
+      // How much was paid into this same scope (line, or whole invoice) before this payment.
       const invAllocs = await this.prisma.paymentAllocation.findMany({
-        where: { invoiceId: inv.id },
+        where: { invoiceId: inv.id, lineId: alloc.lineId ?? null },
         include: { payment: { select: { id: true, paidAt: true } } },
       });
       invAllocs.sort((a, b) => {

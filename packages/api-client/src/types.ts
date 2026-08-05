@@ -183,6 +183,8 @@ export interface Invoice {
   status: InvoiceStatus;
   grossAmount: number;
   discountAmount: number;
+  /** Why the discount was given (free text), or null. */
+  discountReason?: string | null;
   netAmount: number;
   paidAmount: number;
   lines?: InvoiceLine[];

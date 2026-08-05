@@ -214,6 +214,11 @@ export class InvoicesService {
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
         discountAmount,
         netAmount,
+        // Keep the reason in step with the discount: store it when there's a
+        // discount, clear it when the discount goes to zero.
+        ...(dto.discountReason !== undefined || dto.discountType !== undefined || dto.discountValue !== undefined
+          ? { discountReason: discountAmount > 0 ? dto.discountReason?.trim() || null : null }
+          : {}),
         status: deriveStatus(netAmount, inv.paidAmount),
       },
       include: {
@@ -250,6 +255,7 @@ export class InvoicesService {
       status: i.status,
       grossAmount: i.grossAmount,
       discountAmount: i.discountAmount,
+      discountReason: i.discountReason ?? null,
       netAmount: i.netAmount,
       paidAmount: i.paidAmount,
       lines: i.lines?.map((l: any) => ({

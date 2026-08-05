@@ -255,6 +255,8 @@ export const updateInvoiceSchema = z.object({
   discountType: discountType.optional(),
   /** PERCENT: basis points; FLAT: paise. */
   discountValue: z.number().int().nonnegative().optional(),
+  /** Why the discount was given (free text), or "" to clear it. */
+  discountReason: z.string().max(200).optional(),
 });
 export type UpdateInvoiceDto = z.infer<typeof updateInvoiceSchema>;
 
@@ -388,9 +390,13 @@ export const createPaymentSchema = z.object({
   mode: paymentMode.default('CASH'),
   paidAt: z.string().optional(),
   description: z.string().optional(),
-  /** How the payment is split across invoices; auto-allocated if omitted. */
+  /**
+   * How the payment is split — omit for auto (oldest invoice/period first), or
+   * pass explicit rows to control it. `lineId` targets a specific fee line so a
+   * single payment can be split across fees (e.g. some to Store, rest to School).
+   */
   allocations: z
-    .array(z.object({ invoiceId: z.string(), amount: z.number().int().positive() }))
+    .array(z.object({ invoiceId: z.string(), lineId: z.string().optional(), amount: z.number().int().positive() }))
     .optional(),
 });
 export type CreatePaymentDto = z.infer<typeof createPaymentSchema>;
@@ -402,6 +408,9 @@ export const updatePaymentSchema = z.object({
   mode: paymentMode,
   paidAt: z.string().optional(),
   description: z.string().optional(),
+  allocations: z
+    .array(z.object({ invoiceId: z.string(), lineId: z.string().optional(), amount: z.number().int().positive() }))
+    .optional(),
 });
 export type UpdatePaymentDto = z.infer<typeof updatePaymentSchema>;
 

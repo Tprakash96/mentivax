@@ -611,12 +611,16 @@ model Payment {
   @@index([studentId])
 }
 
-/// Splits a payment across one or more invoices.
+/// Splits a payment across one or more invoices (and optionally a specific fee
+/// line, for manual per-fee allocation). `lineId` null = whole-invoice, settled
+/// oldest-period-first as before.
 model PaymentAllocation {
   id        String  @id @default(cuid())
   paymentId String
   invoiceId String
-  /// Amount applied to this invoice (paise).
+  /// The fee line this portion pays, or null for a whole-invoice allocation.
+  lineId    String?
+  /// Amount applied (paise).
   amount    Int
   payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)

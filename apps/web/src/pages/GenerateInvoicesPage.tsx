@@ -23,12 +23,30 @@ export function AddInvoiceModal({ onClose, onDone }: { onClose: () => void; onDo
   const toast = useToast();
   const students = useAsync(() => api.students.list({}), []);
   const preview = useAsync(() => api.invoices.generatePreview(), []);
+  const invoices = useAsync(() => api.invoices.list(), []);
+  // Reason presets: the school's concessions (School Setup → Discounts) + common defaults.
+  const concessions = useAsync(() => api.setup.discounts.list().catch(() => []), []);
+  const reasonOptions = [
+    ...new Set([
+      ...(concessions.data ?? []).map((c) => c.name),
+      'Sibling concession',
+      'Staff ward',
+      'Merit scholarship',
+      'Financial hardship',
+      'Management concession',
+    ]),
+  ];
 
+  const isoDay = (d: Date) => d.toISOString().slice(0, 10);
   const [studentId, setStudentId] = useState('');
   const [feeScope, setFeeScope] = useState<FeeScope>('ALL');
+  const [issueDate, setIssueDate] = useState(() => isoDay(new Date()));
+  const [dueDate, setDueDate] = useState(() => isoDay(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)));
   const [discType, setDiscType] = useState<DiscountType>('NONE');
   const [discValue, setDiscValue] = useState(0);
   const [discReason, setDiscReason] = useState('');
+  // Dropdown selection for the reason: a preset name, or "__other__" for free text.
+  const [reasonChoice, setReasonChoice] = useState('');
   const [discFeeKey, setDiscFeeKey] = useState('');
   const [discPeriod, setDiscPeriod] = useState('');
   const [busy, setBusy] = useState(false);
@@ -41,10 +59,6 @@ export function AddInvoiceModal({ onClose, onDone }: { onClose: () => void; onDo
           (r) => [r.studentId, { all: r.gross, academic: r.academicGross, transport: r.transportGross }] as const,
         ),
       ),
-    [preview.data],
-  );
-  const invoicedIds = useMemo(
-    () => new Set((preview.data ?? []).filter((r) => r.hasInvoice).map((r) => r.studentId)),
     [preview.data],
   );
 
@@ -103,7 +117,16 @@ export function AddInvoiceModal({ onClose, onDone }: { onClose: () => void; onDo
       : (targetFee?.gross ?? base);
   const discount = computeDiscount(discountBase, discType, storedDiscount);
   const net = Math.max(0, base - discount);
-  const canCreate = !!studentId && base > 0 && !busy;
+
+  // Don't let a duplicate invoice be raised while the student still owes on an
+  // earlier one — only offer a new invoice once every prior invoice is settled.
+  const myInvoices = (invoices.data ?? []).filter((i) => i.studentId === studentId && i.status !== 'CANCELLED');
+  const unpaidInvoice = myInvoices.find((i) => i.netAmount - i.paidAmount > 0);
+  const hasPaidOnly = myInvoices.length > 0 && !unpaidInvoice;
+  // Preview of the number the server will assign next (INV-NNNN, sequential).
+  const nextInvoiceId = `INV-${String((invoices.data?.length ?? 0) + 1).padStart(4, '0')}`;
+
+  const canCreate = !!studentId && base > 0 && !busy && !unpaidInvoice;
 
   // Discount charged against one period of the targeted fee (for the allocation view):
   // a chosen period gets the whole discount; "Split equally" spreads it across periods.
@@ -120,6 +143,8 @@ export function AddInvoiceModal({ onClose, onDone }: { onClose: () => void; onDo
       await api.invoices.createOne({
         studentId,
         feeScope,
+        issueDate,
+        dueDate,
         discountType: discType,
         discountValue: storedDiscount,
         discountReason: discType !== 'NONE' ? discReason.trim() || undefined : undefined,
@@ -166,6 +191,7 @@ export function AddInvoiceModal({ onClose, onDone }: { onClose: () => void; onDo
                     setDiscType('NONE');
                     setDiscValue(0);
                     setDiscReason('');
+                    setReasonChoice('');
                     setDiscFeeKey('');
                     setDiscPeriod('');
                   }}
@@ -179,6 +205,21 @@ export function AddInvoiceModal({ onClose, onDone }: { onClose: () => void; onDo
                       Standard: <b>{sel.className}</b>
                     </div>
                   )}
+
+                  <div className="fld">
+                    <label>Invoice ID</label>
+                    <input className="mono" value={nextInvoiceId} disabled />
+                  </div>
+                  <div className="frow" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                    <div className="fld">
+                      <label>Issue date</label>
+                      <input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+                    </div>
+                    <div className="fld">
+                      <label>Due date</label>
+                      <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                    </div>
+                  </div>
 
                   <div className="fld">
                     <label>Fees type</label>
@@ -216,7 +257,17 @@ export function AddInvoiceModal({ onClose, onDone }: { onClose: () => void; onDo
                       <div className="frow" style={{ gridTemplateColumns: discType === 'NONE' ? '1fr' : '1fr 160px' }}>
                         <div className="fld">
                           <label>Discount (optional)</label>
-                          <select value={discType} onChange={(e) => setDiscType(e.target.value as DiscountType)}>
+                          <select
+                            value={discType}
+                            onChange={(e) => {
+                              const v = e.target.value as DiscountType;
+                              setDiscType(v);
+                              if (v === 'NONE') {
+                                setReasonChoice('');
+                                setDiscReason('');
+                              }
+                            }}
+                          >
                             <option value="NONE">No discount</option>
                             <option value="PERCENT">Percent %</option>
                             <option value="FLAT">Flat ₹</option>
@@ -239,9 +290,28 @@ export function AddInvoiceModal({ onClose, onDone }: { onClose: () => void; onDo
                       {discType !== 'NONE' && (
                         <div className="fld">
                           <label>Discount reason</label>
+                          <select
+                            value={reasonChoice}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setReasonChoice(v);
+                              setDiscReason(v === '__other__' ? '' : v);
+                            }}
+                          >
+                            <option value="">Select a reason…</option>
+                            {reasonOptions.map((r) => (
+                              <option key={r} value={r}>{r}</option>
+                            ))}
+                            <option value="__other__">Other…</option>
+                          </select>
+                        </div>
+                      )}
+                      {discType !== 'NONE' && reasonChoice === '__other__' && (
+                        <div className="fld">
+                          <label>Reason (other)</label>
                           <input
                             type="text"
-                            placeholder="e.g. Sibling concession, staff ward…"
+                            placeholder="Enter a reason"
                             value={discReason}
                             onChange={(e) => setDiscReason(e.target.value)}
                           />
@@ -282,9 +352,23 @@ export function AddInvoiceModal({ onClose, onDone }: { onClose: () => void; onDo
                         </div>
                       )}
 
-                      {invoicedIds.has(studentId) && (
-                        <div className="alloc-note">This student already has an invoice — this creates another.</div>
-                      )}
+                      {unpaidInvoice ? (
+                        <div
+                          className="alloc-note"
+                          style={{ color: 'var(--red)', background: 'var(--red-soft)', borderColor: 'var(--red-line)' }}
+                        >
+                          {sel?.name ?? 'This student'} has an unpaid invoice — {unpaidInvoice.number} (
+                          {formatMoney(unpaidInvoice.netAmount - unpaidInvoice.paidAmount)} pending). Collect it before
+                          creating a new one.
+                        </div>
+                      ) : hasPaidOnly ? (
+                        <div
+                          className="alloc-note"
+                          style={{ color: 'var(--success-ink)', background: 'var(--success-soft)', borderColor: 'var(--success-line)' }}
+                        >
+                          Previous invoice{myInvoices.length > 1 ? 's are' : ' is'} fully paid — you can create a new one.
+                        </div>
+                      ) : null}
                     </>
                   ) : (
                     <div className="state">
@@ -314,7 +398,10 @@ export function AddInvoiceModal({ onClose, onDone }: { onClose: () => void; onDo
                     <div className="pba-grid">
                       {allocGroups.map((g) => (
                         <div className="pba-group" key={g.feeName}>
-                          <div className="pba-title">{g.feeName}</div>
+                          <div className="pba-title">
+                            <span>{g.feeName}</span>
+                            <span className="pba-total mono">{formatMoney(g.rows.reduce((s, r) => s + r.amount, 0))}</span>
+                          </div>
                           <div className="pba-note">
                             <Icon name="info" size={13} />
                             Amount is allocated to periods from oldest to newest.
@@ -345,9 +432,11 @@ export function AddInvoiceModal({ onClose, onDone }: { onClose: () => void; onDo
                                       </td>
                                       <td className="num">{formatMoney(payable)}</td>
                                       <td>
-                                        <span className="tag due">
+                                        {/* This is a preview of an invoice not yet created — the period
+                                            isn't "pending payment", it's a new charge about to be billed. */}
+                                        <span className="tag new">
                                           <i />
-                                          Pending
+                                          New
                                         </span>
                                       </td>
                                     </tr>

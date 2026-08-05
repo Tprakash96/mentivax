@@ -105,7 +105,17 @@ export class StudentsService {
         organizationId: t.organizationId,
         academicYearId: t.academicYearId,
         classId: filters.classId || undefined,
-        name: filters.search ? { contains: filters.search, mode: 'insensitive' } : undefined,
+        // Search matches the child's name, guardian name, phone, or admission no.
+        ...(filters.search
+          ? {
+              OR: [
+                { name: { contains: filters.search, mode: 'insensitive' as const } },
+                { parentName: { contains: filters.search, mode: 'insensitive' as const } },
+                { phone: { contains: filters.search, mode: 'insensitive' as const } },
+                { admissionNo: { contains: filters.search, mode: 'insensitive' as const } },
+              ],
+            }
+          : {}),
         // Filter by lifecycle: a given status, else everyone still on the roll.
         enrollmentStatus: enrollments.includes(filters.enrollment ?? '')
           ? (filters.enrollment as never)

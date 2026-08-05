@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatMoney, type DiscountType, type TransportShift } from '@mentivax/core';
 import type { Invoice, Student, SchoolClass } from '@mentivax/api-client';
@@ -40,6 +40,8 @@ export function StudentsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editStudent, setEditStudent] = useState<Student | null>(null);
+  // Which stat card's drill-down is open (null = none).
+  const [statList, setStatList] = useState<null | 'active' | 'joined' | 'due' | 'collected'>(null);
 
   // Class-wise view: one standard at a time (plus an "All classes" option).
   const classes = useAsync(() => api.classes.list(), []);
@@ -51,7 +53,9 @@ export function StudentsPage() {
   const { data, loading, error, reload } = useAsync(
     () =>
       api.students.list({
-        classId: classId && classId !== 'all' ? classId : undefined,
+        // While searching, look across every class — a guardian/phone match may
+        // live in a standard other than the one selected in the class rail.
+        classId: search.trim() || classId === 'all' ? undefined : classId || undefined,
         enrollment: filter || undefined,
         search,
       }),
@@ -83,37 +87,39 @@ export function StudentsPage() {
       </div>
 
       <div className="acct-cards students-stats">
-        <div className="acct-card">
+        <button className="acct-card" onClick={() => setStatList('active')}>
           <div className="acct-label">Active students</div>
           <div className="acct-bal mono">{all.length}</div>
           <div className="acct-note">across {classList.length} classes</div>
-        </div>
-        <div className="acct-card">
+          <div className="acct-view">View students ›</div>
+        </button>
+        <button className="acct-card" onClick={() => setStatList('joined')}>
           <div className="acct-label">Joined this year</div>
           <div className="acct-bal mono" style={{ color: 'var(--blue)' }}>{newAdmissions}</div>
           <div className="acct-note">new admissions</div>
-        </div>
-        <div className="acct-card">
+          <div className="acct-view">View admissions ›</div>
+        </button>
+        <button className="acct-card" onClick={() => setStatList('due')}>
           <div className="acct-label">Fee due</div>
           <div className="acct-bal mono neg">{formatMoney(totalPending)}</div>
           <div className="acct-note">{owing.length} student{owing.length === 1 ? '' : 's'} owing</div>
-        </div>
-        <div className="acct-card">
+          <div className="acct-view">View who owes ›</div>
+        </button>
+        <button className="acct-card" onClick={() => setStatList('collected')}>
           <div className="acct-label">Collected</div>
           <div className="acct-bal mono pos">{formatMoney(totalPaid)}</div>
           <div className="acct-note">received this year</div>
-        </div>
+          <div className="acct-view">View who paid ›</div>
+        </button>
       </div>
 
       <div className="tbar">
-        <div className="search">
-          <Icon name="search" />
-          <input
-            placeholder="Search name, parent, phone…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <StudentSearch
+          all={all}
+          value={search}
+          onChange={setSearch}
+          onPick={(s) => navigate(`/students/${s.id}`)}
+        />
         <div className="seg">
           {FILTERS.map((f) => (
             <button key={f.f} className={filter === f.f ? 'on' : ''} onClick={() => setFilter(f.f)}>
@@ -276,7 +282,251 @@ export function StudentsPage() {
           }}
         />
       )}
+      {statList && (
+        <StudentStatModal
+          which={statList}
+          all={all}
+          owing={owing}
+          totalPending={totalPending}
+          totalPaid={totalPaid}
+          classCount={classList.length}
+          onClose={() => setStatList(null)}
+          onPick={(id) => {
+            setStatList(null);
+            navigate(`/students/${id}`);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+/** Drill-down behind a stat card: the students that make up the number. */
+function StudentStatModal({
+  which,
+  all,
+  owing,
+  totalPending,
+  totalPaid,
+  classCount,
+  onClose,
+  onPick,
+}: {
+  which: 'active' | 'joined' | 'due' | 'collected';
+  all: Student[];
+  owing: Student[];
+  totalPending: number;
+  totalPaid: number;
+  classCount: number;
+  onClose: () => void;
+  onPick: (id: string) => void;
+}) {
+  const meta = {
+    active: { title: 'Active students', sub: `${all.length} on the rolls across ${classCount} classes`, rows: all },
+    joined: {
+      title: 'Joined this year',
+      sub: `${all.filter((s) => s.isNewAdmission).length} new admissions this year`,
+      rows: all.filter((s) => s.isNewAdmission),
+    },
+    due: {
+      title: 'Fee due',
+      sub: `${owing.length} student${owing.length === 1 ? '' : 's'} owing — ${formatMoney(totalPending)} total`,
+      rows: [...owing].sort((a, b) => b.pending - a.pending),
+    },
+    collected: {
+      title: 'Collected',
+      sub: `${formatMoney(totalPaid)} received from ${all.filter((s) => s.paid > 0).length} students`,
+      rows: all.filter((s) => s.paid > 0).sort((a, b) => b.paid - a.paid),
+    },
+  }[which];
+
+  const money = which === 'collected' ? 'paid' : 'pending';
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 760, width: '94%' }}>
+        <div className="mh">
+          <div>
+            <b>{meta.title}{meta.rows.length ? ` · ${meta.rows.length}` : ''}</b>
+            <span>{meta.sub}</span>
+          </div>
+          <button className="x" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="mb" style={{ padding: 0 }}>
+          <div className="card-t" style={{ border: 'none', boxShadow: 'none', borderRadius: 0, minHeight: 0, overflowY: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Class</th>
+                  <th>Guardian</th>
+                  <th className="num">{which === 'collected' ? 'Paid' : 'Fee due'}</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {meta.rows.map((s) => {
+                  const tag = ENROLL_TAG[s.enrollment] ?? ENROLL_TAG.ACTIVE;
+                  const amt = money === 'paid' ? s.paid : s.pending;
+                  return (
+                    <tr key={s.id} className="click" onClick={() => onPick(s.id)}>
+                      <td>
+                        <b style={{ fontWeight: 600 }}>{s.name}</b>
+                        {s.admissionNo && <span className="mono" style={{ marginLeft: 6, fontSize: 11, color: 'var(--ink-4)' }}>{s.admissionNo}</span>}
+                        {s.isNewAdmission && which !== 'joined' && <span className="tag new" style={{ marginLeft: 6 }}>NEW</span>}
+                      </td>
+                      <td><span className="cls">{s.className}</span></td>
+                      <td>
+                        {s.parentName ? (
+                          <>
+                            <b style={{ fontWeight: 600 }}>{s.parentName}</b>
+                            {s.phone && <span className="mono" style={{ display: 'block', fontSize: 11, color: 'var(--ink-4)' }}>{s.phone}</span>}
+                          </>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
+                      <td className={`num mono${money === 'paid' ? ' pos' : amt > 0 ? ' neg' : ''}`}>
+                        {amt > 0 ? formatMoney(amt) : '—'}
+                      </td>
+                      <td><span className={`tag ${tag.cls}`}><i />{tag.label}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {meta.rows.length === 0 && <div className="state">No students here yet.</div>}
+          </div>
+        </div>
+        <div className="mf">
+          <button className="btn" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Wrap the matched slice of `text` so it's obvious why a suggestion appeared. */
+function highlightMatch(text: string, q: string) {
+  if (!q) return text;
+  const i = text.toLowerCase().indexOf(q.toLowerCase());
+  if (i < 0) return text;
+  return (
+    <>
+      {text.slice(0, i)}
+      <mark className="ssg-hit">{text.slice(i, i + q.length)}</mark>
+      {text.slice(i + q.length)}
+    </>
+  );
+}
+
+/**
+ * Search box with a live typeahead. As you type it suggests matching students
+ * across the WHOLE roster (every class, any status) — by name, guardian, phone
+ * or admission no — so you can jump straight to a profile even when a single
+ * class is filtered in the table. The matched text is highlighted, so a result
+ * that matched on the guardian (not the child's name) is obvious. The box also
+ * still filters the table below.
+ */
+function StudentSearch({
+  all,
+  value,
+  onChange,
+  onPick,
+}: {
+  all: Student[];
+  value: string;
+  onChange: (v: string) => void;
+  onPick: (s: Student) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+
+  const qraw = value.trim();
+  const q = qraw.toLowerCase();
+  // Phone matching ignores spaces/dashes so "9876510001" finds "98765 10001".
+  const digitsOnly = (v: string) => v.replace(/\D/g, '');
+  const qDigits = digitsOnly(q);
+  const matches = q
+    ? all
+        .filter(
+          (s) =>
+            s.name.toLowerCase().includes(q) ||
+            (s.parentName ?? '').toLowerCase().includes(q) ||
+            (s.phone ?? '').toLowerCase().includes(q) ||
+            (qDigits.length >= 3 && digitsOnly(s.phone ?? '').includes(qDigits)) ||
+            (s.admissionNo ?? '').toLowerCase().includes(q),
+        )
+        .slice(0, 8)
+    : [];
+
+  return (
+    <div className="search-wrap" ref={ref}>
+      <div className="search">
+        <Icon name="search" />
+        <input
+          placeholder="Search name, parent, phone…"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setOpen(false);
+            if (e.key === 'Enter' && matches[0]) {
+              onPick(matches[0]);
+              setOpen(false);
+            }
+          }}
+        />
+      </div>
+      {open && q && (
+        <div className="search-sug">
+          {matches.length === 0 ? (
+            <div className="search-sug-empty">No students match “{value}”.</div>
+          ) : (
+            matches.map((s) => {
+              const tag = ENROLL_TAG[s.enrollment] ?? ENROLL_TAG.ACTIVE;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  className="search-sug-row"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    onPick(s);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="ssg-av">{s.name.slice(0, 1).toUpperCase()}</span>
+                  <span className="ssg-main">
+                    <span className="ssg-name">
+                      <b>{highlightMatch(s.name, qraw)}</b>
+                      <span className="cls">{s.className}</span>
+                      {s.enrollment !== 'ACTIVE' && <span className={`tag ${tag.cls}`}><i />{tag.label}</span>}
+                    </span>
+                    <span className="ssg-sub">
+                      <span className="ssg-guard">{s.parentName ? highlightMatch(s.parentName, qraw) : 'No guardian'}</span>
+                      {s.phone ? <> · {highlightMatch(s.phone, qraw)}</> : ''}
+                      {s.admissionNo ? <> · {highlightMatch(s.admissionNo, qraw)}</> : ''}
+                    </span>
+                  </span>
+                  <span className={`ssg-due mono${s.pending > 0 ? ' neg' : ' pos'}`}>
+                    {s.pending > 0 ? formatMoney(s.pending) : 'Paid'}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -518,8 +768,6 @@ function AddStudentModal({
   const [dob, setDob] = useState(editing?.dateOfBirth ?? '');
   const [classId, setClassId] = useState(editing?.classId ?? '');
   const [admType, setAdmType] = useState<'NEW' | 'TRANSFER' | 'READMISSION'>(editing?.admissionType ?? 'NEW');
-  const [emisNo, setEmisNo] = useState(editing?.emisNo ?? '');
-  const [penNo, setPenNo] = useState(editing?.penNo ?? '');
   const [aadhaar, setAadhaar] = useState(editing?.aadhaar ?? '');
   const [enrollment, setEnrollment] = useState<Student['enrollment']>(editing?.enrollment ?? 'ACTIVE');
   // Step 2 — guardian
@@ -563,7 +811,38 @@ function AddStudentModal({
   const [err, setErr] = useState<string | null>(null);
 
   const list: SchoolClass[] = classes.data ?? [];
-  const valid = name.trim().length > 0 && classId.length > 0;
+  const STEPS = ['Student', 'Guardian', 'Documents', 'Transport'];
+  // New admissions require every field except admission type (step 1) and email
+  // (step 2); relationship always has a value. Edits stay lenient so an existing
+  // record with a blank field isn't locked out of saving.
+  const req = !editing ? <span className="req"> *</span> : null;
+  const step1Valid = editing
+    ? name.trim().length > 0 && classId.length > 0
+    : name.trim().length > 0 &&
+      admissionNo.trim().length > 0 &&
+      !!dob &&
+      classId.length > 0 &&
+      aadhaar.trim().length > 0;
+  const step2Valid = editing ? true : parentName.trim().length > 0 && phone.trim().length > 0;
+  // At least one document must be ticked on a new admission (Documents step).
+  const step3Valid = editing ? true : documents.length > 0;
+  const valid = step1Valid && step2Valid && step3Valid;
+  // Transport and concession are optional — a student needs neither. Admit is
+  // blocked only when a *required* earlier step (1–3) is incomplete; name them
+  // so the user isn't left guessing why the button is greyed out.
+  const stepOk = [step1Valid, step2Valid, step3Valid];
+  const incompleteSteps = STEPS.slice(0, 3).filter((_, i) => !stepOk[i]);
+  // Can the stepper jump to step n? Freely go back; only go forward when every
+  // earlier required step is satisfied.
+  const canGoTo = (n: number) => n <= step || stepOk.slice(0, n - 1).every(Boolean);
+  const disabledHint =
+    step === 4 && !valid
+      ? `Finish the ${incompleteSteps.join(' & ')} step${incompleteSteps.length > 1 ? 's' : ''} first`
+      : step === 3 && !step3Valid
+        ? 'Tick at least one document to continue'
+        : (step === 1 && !step1Valid) || (step === 2 && !step2Valid)
+          ? 'Fill the required fields marked *'
+          : null;
   // The selected stop's pickup points — transport fares live on these.
   const stopLandmarks =
     (routes.data ?? []).flatMap((r) => r.stops).find((s) => s.id === transportStopId)?.landmarks ?? [];
@@ -574,8 +853,6 @@ function AddStudentModal({
   const discountFeeKey = discountType === 'NONE' ? '' : (selectedRule?.appliesTo ?? '');
   const fmtRule = (r: { kind: string; value: number }) => (r.kind === 'PERCENT' ? `${r.value / 100}%` : formatMoney(r.value));
 
-  const STEPS = ['Student', 'Guardian', 'Transport & documents'];
-
   const save = async () => {
     if (!valid) return;
     setSaving(true);
@@ -585,8 +862,6 @@ function AddStudentModal({
       admissionType: admType,
       isNewAdmission: admType === 'NEW',
       dateOfBirth: dob || undefined,
-      emisNo: emisNo.trim() || undefined,
-      penNo: penNo.trim() || undefined,
       aadhaar: aadhaar.trim() || undefined,
       guardianRelation: guardianRelation || undefined,
       documents,
@@ -689,16 +964,19 @@ function AddStudentModal({
         <div className="mh">
           <div className="adm-head">
             <b>{editing ? 'Edit student' : 'New admission'}</b>
-            <span>Three steps · the student is on the roll and in the fee run at the end of it</span>
+            <span>Four steps · the student is on the roll and in the fee run at the end of it</span>
           </div>
           <div className="adm-steps">
             {STEPS.map((label, i) => {
               const n = i + 1;
+              const reachable = canGoTo(n);
               return (
                 <button
                   key={label}
-                  className={`adm-step${step === n ? ' on' : ''}${step > n ? ' done' : ''}`}
-                  onClick={() => setStep(n)}
+                  className={`adm-step${step === n ? ' on' : ''}${step > n ? ' done' : ''}${reachable ? '' : ' locked'}`}
+                  onClick={() => reachable && setStep(n)}
+                  disabled={!reachable}
+                  title={reachable ? undefined : 'Finish the earlier steps first'}
                 >
                   <span className="adm-num">{n}</span>
                   {label}
@@ -716,21 +994,21 @@ function AddStudentModal({
             <>
               <div className="frow" style={{ gridTemplateColumns: '1fr 200px' }}>
                 <div className="fld">
-                  <label>Student name</label>
+                  <label>Student name{req}</label>
                   <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name as on certificate" autoFocus />
                 </div>
                 <div className="fld">
-                  <label>Admission no</label>
+                  <label>Admission no{req}</label>
                   <input className="mono" value={admissionNo} onChange={(e) => setAdmissionNo(e.target.value)} placeholder="e.g. MVX1104" />
                 </div>
               </div>
               <div className="frow" style={{ gridTemplateColumns: '1fr 1fr' }}>
                 <div className="fld">
-                  <label>Date of birth</label>
+                  <label>Date of birth{req}</label>
                   <input type="date" value={dob ?? ''} onChange={(e) => setDob(e.target.value)} />
                 </div>
                 <div className="fld">
-                  <label>Class &amp; section</label>
+                  <label>Class &amp; section{req}</label>
                   <select value={classId} onChange={(e) => setClassId(e.target.value)}>
                     <option value="">Select a class…</option>
                     {list.map((c) => (
@@ -763,10 +1041,8 @@ function AddStudentModal({
                 )}
               </div>
               <div className="adm-idhead">Identifiers this school collects</div>
-              <div className="frow" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-                <div className="fld"><label>EMIS number</label><input className="mono" value={emisNo} onChange={(e) => setEmisNo(e.target.value)} placeholder="33xxxxxxxxxx" /></div>
-                <div className="fld"><label>PEN / APAAR</label><input className="mono" value={penNo} onChange={(e) => setPenNo(e.target.value)} placeholder="optional" /></div>
-                <div className="fld"><label>Aadhaar</label><input className="mono" value={aadhaar} onChange={(e) => setAadhaar(e.target.value)} placeholder="XXXX XXXX XXXX" /></div>
+              <div className="frow" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                <div className="fld"><label>Aadhaar{req}</label><input className="mono" value={aadhaar} onChange={(e) => setAadhaar(e.target.value)} placeholder="XXXX XXXX XXXX" /></div>
               </div>
             </>
           )}
@@ -774,7 +1050,7 @@ function AddStudentModal({
           {step === 2 && (
             <>
               <div className="frow" style={{ gridTemplateColumns: '1fr 180px' }}>
-                <div className="fld"><label>Guardian name</label><input value={parentName} onChange={(e) => setParentName(e.target.value)} placeholder="e.g. Ramesh Kumar" /></div>
+                <div className="fld"><label>Guardian name{req}</label><input value={parentName} onChange={(e) => setParentName(e.target.value)} placeholder="e.g. Ramesh Kumar" /></div>
                 <div className="fld">
                   <label>Relationship</label>
                   <select value={guardianRelation} onChange={(e) => setGuardianRelation(e.target.value)}>
@@ -783,13 +1059,45 @@ function AddStudentModal({
                 </div>
               </div>
               <div className="frow" style={{ gridTemplateColumns: '1fr 1fr' }}>
-                <div className="fld"><label>Mobile</label><input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="98765 43210" /></div>
+                <div className="fld"><label>Mobile{req}</label><input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="98765 43210" /></div>
                 <div className="fld"><label>Email (optional)</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="parent@example.com" /></div>
               </div>
             </>
           )}
 
           {step === 3 && (
+            <>
+              <div className="fld">
+                <label>
+                  Documents collected
+                  {editing ? (
+                    <span style={{ color: 'var(--ink-4)', fontWeight: 400 }}> · optional</span>
+                  ) : (
+                    <span className="req"> · tick at least one *</span>
+                  )}
+                </label>
+                <div className="chiprow">
+                  {(docChecklist.length ? docChecklist : STUDENT_DOCS).map((d) => {
+                    const have = documents.includes(d);
+                    return (
+                      <button
+                        key={d}
+                        className={`fchip${have ? ' on' : ''}`}
+                        onClick={() => setDocuments((xs) => (have ? xs.filter((x) => x !== d) : [...xs, d]))}
+                      >
+                        {d} {have ? '✓' : ''}
+                      </button>
+                    );
+                  })}
+                </div>
+                <span className="muted" style={{ fontSize: 11, marginTop: 4, display: 'block' }}>
+                  Tick what you have now — the rest can be collected later from the Documents page.
+                </span>
+              </div>
+            </>
+          )}
+
+          {step === 4 && (
             <>
               {transportOn && (routes.data ?? []).length > 0 ? (
                 <>
@@ -840,27 +1148,6 @@ function AddStudentModal({
               ) : (
                 <div className="muted" style={{ fontSize: 12.5 }}>Transport isn’t enabled — assign a vehicle later from Fees → Transport.</div>
               )}
-
-              <div className="fld" style={{ marginTop: 12 }}>
-                <label>Documents collected <span style={{ color: 'var(--ink-4)', fontWeight: 400 }}>· optional</span></label>
-                <div className="chiprow">
-                  {(docChecklist.length ? docChecklist : STUDENT_DOCS).map((d) => {
-                    const have = documents.includes(d);
-                    return (
-                      <button
-                        key={d}
-                        className={`fchip${have ? ' on' : ''}`}
-                        onClick={() => setDocuments((xs) => (have ? xs.filter((x) => x !== d) : [...xs, d]))}
-                      >
-                        {d} {have ? '✓' : ''}
-                      </button>
-                    );
-                  })}
-                </div>
-                <span className="muted" style={{ fontSize: 11, marginTop: 4, display: 'block' }}>
-                  Tick what you have now — the rest can be collected later from the Documents page.
-                </span>
-              </div>
 
               <label className="chk" style={{ marginTop: 12 }}>
                 <input type="checkbox" checked={feeExempt} onChange={(e) => setFeeExempt(e.target.checked)} />
@@ -913,9 +1200,19 @@ function AddStudentModal({
             <button className="btn" onClick={onClose}>Cancel</button>
           )}
           <div className="sp" style={{ flex: 1 }} />
-          <span className="muted" style={{ fontSize: 11.5, marginRight: 10 }}>You can change any of this later from the profile.</span>
-          {step < 3 ? (
-            <button className="btn grn" disabled={step === 1 && !valid} onClick={() => setStep(step + 1)}>Continue</button>
+          {disabledHint ? (
+            <span style={{ fontSize: 11.5, marginRight: 10, color: 'var(--red)', fontWeight: 600 }}>{disabledHint}</span>
+          ) : (
+            <span className="muted" style={{ fontSize: 11.5, marginRight: 10 }}>You can change any of this later from the profile.</span>
+          )}
+          {step < 4 ? (
+            <button
+              className="btn grn"
+              disabled={(step === 1 && !step1Valid) || (step === 2 && !step2Valid) || (step === 3 && !step3Valid)}
+              onClick={() => setStep(step + 1)}
+            >
+              Continue
+            </button>
           ) : (
             <button className="btn grn" disabled={!valid || saving} onClick={save}>
               {saving ? 'Saving…' : editing ? 'Save changes' : 'Admit student'}
