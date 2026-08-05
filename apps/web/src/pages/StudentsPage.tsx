@@ -578,6 +578,7 @@ function ImportStudentsModal({ onClose, onDone }: { onClose: () => void; onDone:
   const classes = useAsync(() => api.classes.list(), []);
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [fileName, setFileName] = useState('');
+  const [parseError, setParseError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<{ created: number; failed: { name: string; error: string }[] } | null>(null);
 
@@ -587,12 +588,13 @@ function ImportStudentsModal({ onClose, onDone }: { onClose: () => void; onDone:
     return classList.find((c) => c.name.toLowerCase() === n)?.id ?? null;
   };
 
-  const parse = (text: string) => {
-    const grid = parseCsv(text);
+  const applyGrid = (grid: string[][]) => {
     if (grid.length < 2) {
       setRows([]);
+      setParseError('No student rows found — the file needs a header row plus at least one student.');
       return;
     }
+    setParseError(null);
     const header = grid[0]!.map((h) => h.trim().toLowerCase());
     const col = (...names: string[]) => {
       for (const n of names) {
@@ -622,10 +624,36 @@ function ImportStudentsModal({ onClose, onDone }: { onClose: () => void; onDone:
     setResult(null);
   };
 
-  const onFile = (f: File) => {
+  // Accepts CSV and any spreadsheet Excel can save (.xlsx, .xls, .xlsm, .xlsb,
+  // .ods). CSV is read as text; spreadsheets are decoded with SheetJS, loaded
+  // on demand so the library only ships when someone actually imports a file.
+  const onFile = async (f: File) => {
     setFileName(f.name);
+    setParseError(null);
+    const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
+    const isSheet = ['xlsx', 'xls', 'xlsm', 'xlsb', 'ods'].includes(ext);
+    if (isSheet) {
+      try {
+        const buf = await f.arrayBuffer();
+        const XLSX = await import('xlsx');
+        const wb = XLSX.read(buf, { type: 'array' });
+        const sheetName = wb.SheetNames[0];
+        const ws = sheetName ? wb.Sheets[sheetName] : undefined;
+        const grid = ws
+          ? (XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '', raw: false }) as unknown[][]).map(
+              (r) => (Array.isArray(r) ? r.map((c) => String(c ?? '')) : []),
+            )
+          : [];
+        applyGrid(grid);
+      } catch {
+        setRows([]);
+        setParseError('Could not read that spreadsheet. Try re-saving it as .xlsx or .csv.');
+      }
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = () => parse(String(reader.result ?? ''));
+    reader.onload = () => applyGrid(parseCsv(String(reader.result ?? '')));
+    reader.onerror = () => setParseError('Could not read that file.');
     reader.readAsText(f);
   };
 
@@ -661,7 +689,7 @@ function ImportStudentsModal({ onClose, onDone }: { onClose: () => void; onDone:
         <div className="mh">
           <div>
             <b>Import students</b>
-            <span>Upload a CSV — columns map themselves</span>
+            <span>Upload a CSV or Excel file — columns map themselves</span>
           </div>
           <button className="x" onClick={onClose}>
             <Icon name="x" />
@@ -670,20 +698,22 @@ function ImportStudentsModal({ onClose, onDone }: { onClose: () => void; onDone:
         <div className="mb" style={{ maxHeight: '72vh', overflowY: 'auto' }}>
           <div className="import-drop">
             <input
-              id="csv-file"
+              id="import-file"
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.xlsx,.xls,.xlsm,.xlsb,.ods,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.oasis.opendocument.spreadsheet"
               style={{ display: 'none' }}
               onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
             />
-            <label htmlFor="csv-file" className="import-tile">
+            <label htmlFor="import-file" className="import-tile">
               <span className="import-plus">+</span>
               <div>
-                <b>{fileName || 'Choose a CSV file'}</b>
-                <span>Expected columns: Name · Class · Guardian · Phone · Admission (new/old)</span>
+                <b>{fileName || 'Choose a CSV or Excel file'}</b>
+                <span>Excel (.xlsx, .xls) or CSV · Columns: Name · Class · Guardian · Phone · Admission (new/old)</span>
               </div>
             </label>
           </div>
+
+          {parseError && <div className="state err" style={{ marginTop: 10 }}>{parseError}</div>}
 
           {rows.length > 0 && (
             <>
