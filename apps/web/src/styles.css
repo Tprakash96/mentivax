@@ -2144,6 +2144,45 @@ input[type='number'] {
   justify-content: space-between;
   gap: 12px;
 }
+.pba-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  user-select: none;
+}
+.pba-check input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--green);
+  cursor: pointer;
+  flex: none;
+}
+.pba-check input:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+.pay-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pay-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--success-ink);
+  background: var(--green-soft);
+  border: 1px solid var(--green);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.pay-chip:hover {
+  filter: brightness(0.97);
+}
 .pba-title-right {
   display: flex;
   align-items: center;

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { formatMoney, paiseToRupees, rupeesToPaise, type FeePeriod, type PaymentMode } from '@mentivax/core';
 import type { Invoice, MentivaxClient, Payment, Student } from '@mentivax/api-client';
 import { Icon } from '../components/Icon';
@@ -17,70 +17,6 @@ const MODES: { value: PaymentMode; label: string }[] = [
 ];
 
 const MODE_LABEL = Object.fromEntries(MODES.map((m) => [m.value, m.label]));
-
-/** Multi-select dropdown for choosing which fees a payment covers. */
-function FeesSelect({
-  feeNames,
-  selected,
-  onChange,
-}: {
-  feeNames: string[];
-  selected: Set<string>;
-  onChange: (s: Set<string>) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [open]);
-
-  const all = feeNames.length > 0 && selected.size === feeNames.length;
-  const label =
-    feeNames.length === 0
-      ? 'No fees'
-      : all
-        ? 'All fees'
-        : selected.size === 0
-          ? 'Select fees…'
-          : [...selected].join(', ');
-  const toggle = (n: string) => {
-    const s = new Set(selected);
-    if (s.has(n)) s.delete(n);
-    else s.add(n);
-    onChange(s);
-  };
-
-  return (
-    <div className="picker" ref={ref}>
-      <button type="button" className="feesel" onClick={() => setOpen((o) => !o)}>
-        <span className="feesel-label">{label}</span>
-      </button>
-      {open && (
-        <div className="picker-menu">
-          <button
-            type="button"
-            className="feesel-opt feesel-all"
-            onClick={() => onChange(new Set(all ? [] : feeNames))}
-          >
-            {all ? 'Clear all' : 'Select all'}
-          </button>
-          {feeNames.map((n) => (
-            <label key={n} className="feesel-opt">
-              <input type="checkbox" checked={selected.has(n)} onChange={() => toggle(n)} />
-              <span>{n}</span>
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 /**
  * A single due unit for a student — one *period* of a fee line (or the whole
@@ -176,29 +112,6 @@ async function loadDues(api: MentivaxClient, studentId: string): Promise<Due[]> 
 
 type AllocRow = Due & { payNow: number; balance: number; eligible: boolean };
 
-/** Split the entered amount across the selected fees' pending dues, oldest first. */
-function allocate(dues: Due[], amountPaise: number, selected: Set<string>) {
-  let rem = amountPaise;
-  const rows = dues.map((d) => {
-    const eligible = selected.has(d.feeName);
-    const payNow = eligible && d.pending > 0 ? Math.min(rem, d.pending) : 0;
-    rem -= payNow;
-    return { ...d, payNow, balance: d.pending - payNow, eligible };
-  });
-  const pendingBefore = dues.reduce((s, d) => s + d.pending, 0);
-  const selectedPending = dues.reduce((s, d) => s + (selected.has(d.feeName) ? d.pending : 0), 0);
-  const advance = Math.max(0, rem);
-  const payingNow = amountPaise - advance;
-  return {
-    rows,
-    pendingBefore,
-    selectedPending,
-    payingNow,
-    pendingAfter: Math.max(0, pendingBefore - payingNow),
-    advance,
-  };
-}
-
 /**
  * Manual split: the user set a "Paying now" amount per fee line. Each line's
  * amount fills its own periods oldest-first (never more than the line's pending).
@@ -220,6 +133,42 @@ function allocateManual(dues: Due[], payByLine: Record<string, number>) {
     payingNow,
     pendingAfter: Math.max(0, pendingBefore - payingNow),
     advance: 0,
+  };
+}
+
+/**
+ * Priority split: ticked fees are cleared *first* (in full, oldest period first),
+ * then whatever's left of the amount flows to the un-ticked fees oldest-first.
+ * Lets a parent say "put this ₹20,000 on Books + Uniform, rest on School Fee":
+ * tick Books and Uniform, and the remainder lands on the others automatically.
+ * With nothing ticked it degrades to a plain oldest-first allocation.
+ */
+function allocatePriority(dues: Due[], amountPaise: number, fullFees: Set<string>) {
+  let rem = amountPaise;
+  const payByKey: Record<string, number> = {};
+  // Two passes over the same order: ticked fees first, then the rest.
+  for (const ticked of [true, false]) {
+    for (const d of dues) {
+      if (fullFees.has(d.feeName) !== ticked || d.pending <= 0) continue;
+      const pay = Math.min(rem, d.pending);
+      payByKey[d.key] = pay;
+      rem -= pay;
+    }
+  }
+  const rows: AllocRow[] = dues.map((d) => {
+    const payNow = payByKey[d.key] ?? 0;
+    return { ...d, payNow, balance: d.pending - payNow, eligible: true };
+  });
+  const pendingBefore = dues.reduce((s, d) => s + d.pending, 0);
+  const advance = Math.max(0, rem);
+  const payingNow = amountPaise - advance;
+  return {
+    rows,
+    pendingBefore,
+    selectedPending: pendingBefore,
+    payingNow,
+    pendingAfter: Math.max(0, pendingBefore - payingNow),
+    advance,
   };
 }
 
@@ -793,23 +742,31 @@ function RecordPaymentModal({
     () => (!editing && studentId ? loadDues(api, studentId) : Promise.resolve<Due[]>([])),
     [studentId, editing],
   );
-  const feeNames = useMemo(
-    () => [...new Set((dues.data ?? []).map((d) => d.feeName))],
-    [dues.data],
-  );
-  const [selectedFees, setSelectedFees] = useState<Set<string>>(new Set());
-  // Default to all fees whenever the student's dues change; drop any manual split.
+  // Fees ticked to be cleared first from the amount (rest goes oldest-first).
+  const [fullFees, setFullFees] = useState<Set<string>>(new Set());
+  // Fresh student → clear the ticks and any manual split.
   useEffect(() => {
-    setSelectedFees(new Set((dues.data ?? []).map((d) => d.feeName)));
+    setFullFees(new Set());
     setManualMode(false);
     setManualPay({});
   }, [dues.data]);
 
-  // Auto split: distribute the single Amount across selected fees, oldest-first.
+  // Auto split: clear ticked fees first, then spill the rest oldest-first.
   const autoAlloc = useMemo(
-    () => allocate(dues.data ?? [], rupeesToPaise(amount), selectedFees),
-    [dues.data, amount, selectedFees],
+    () => allocatePriority(dues.data ?? [], rupeesToPaise(amount), fullFees),
+    [dues.data, amount, fullFees],
   );
+  // Tick/untick a fee: also drop any manual split so the amount re-drives.
+  const toggleFullFee = (feeName: string) => {
+    setManualMode(false);
+    setManualPay({});
+    setFullFees((s) => {
+      const next = new Set(s);
+      if (next.has(feeName)) next.delete(feeName);
+      else next.add(feeName);
+      return next;
+    });
+  };
   // Manual split: honour each fee's typed "Paying now".
   const manualPaise = useMemo(() => {
     const m: Record<string, number> = {};
@@ -881,13 +838,13 @@ function RecordPaymentModal({
           description: description || undefined,
         });
       } else {
-        // When the user set a manual split, send one allocation per fee line
-        // (invoiceId + lineId + the amount applied); otherwise let the API
-        // auto-apply the total to the oldest open invoices.
+        // Persist exactly the split shown on the left (checkbox-priority, manual
+        // per-fee, or plain oldest-first) as one allocation per fee line, so what
+        // the user sees is what's recorded. No preview → let the API auto-apply.
         let allocations: { invoiceId: string; lineId: string; amount: number }[] | undefined;
-        if (manualMode) {
+        if (showPreview) {
           const byLine = new Map<string, { invoiceId: string; lineId: string; amount: number }>();
-          for (const r of manualAlloc.rows) {
+          for (const r of alloc.rows) {
             if (r.payNow <= 0) continue;
             const g = byLine.get(r.lineId);
             if (g) g.amount += r.payNow;
@@ -958,7 +915,15 @@ function RecordPaymentModal({
                       return (
                         <div className={`pba-group${eligible ? '' : ' alloc-off'}`} key={g.lineId}>
                           <div className="pba-title">
-                            <span>{g.feeName}</span>
+                            <label className="pba-check" title="Clear this fee first from the amount">
+                              <input
+                                type="checkbox"
+                                checked={fullFees.has(g.feeName)}
+                                disabled={agg.pending === 0}
+                                onChange={() => toggleFullFee(g.feeName)}
+                              />
+                              <span>{g.feeName}</span>
+                            </label>
                             <span className="pba-title-right">
                               <span className="pba-pay">
                                 Pay ₹
@@ -978,7 +943,7 @@ function RecordPaymentModal({
                           </div>
                           <div className="pba-note">
                             <Icon name="info" size={13} />
-                            Type what to pay for this fee — it settles the oldest period first.
+                            Tick to clear this fee first, or type an exact amount — either settles the oldest period first.
                           </div>
                           <div className="card-t" style={{ overflowX: 'auto' }}>
                             <table className="fs-tbl">
@@ -1053,10 +1018,17 @@ function RecordPaymentModal({
                   <StudentPicker students={list} value={studentId} onChange={setStudentId} />
                 )}
               </div>
-              {showPreview && (
+              {showPreview && fullFees.size > 0 && (
                 <div className="fld">
-                  <label>Fees to pay towards</label>
-                  <FeesSelect feeNames={feeNames} selected={selectedFees} onChange={setSelectedFees} />
+                  <label>Cleared first</label>
+                  <div className="pay-chips">
+                    {[...fullFees].map((n) => (
+                      <button type="button" key={n} className="pay-chip" onClick={() => toggleFullFee(n)}>
+                        {n}
+                        <Icon name="x" size={12} />
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               <div className="frow" style={{ gridTemplateColumns: '1fr 1fr' }}>
