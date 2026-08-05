@@ -573,6 +573,8 @@ export function InvoicesDetailModal({ onClose, scope }: { onClose: () => void; s
 export function CollectedDetailModal({ onClose, scope }: { onClose: () => void; scope?: Invoice[] }) {
   const { api } = useApi();
   const payments = useAsync(() => (scope ? Promise.resolve([]) : api.payments.list()), []);
+  // Which payment row is expanded to show its period-wise breakdown.
+  const [openId, setOpenId] = useState<string | null>(null);
   // Scoped view: collected per matching invoice. Global view: every payment receipt.
   const collectedInvoices = (scope ?? []).filter((v) => v.paidAmount > 0);
   const list = payments.data ?? [];
@@ -624,28 +626,53 @@ export function CollectedDetailModal({ onClose, scope }: { onClose: () => void; 
                     <th>Student</th>
                     <th className="num">Amount</th>
                     <th>Mode</th>
+                    <th aria-label="expand" />
                   </tr>
                 </thead>
                 <tbody>
-                  {list.map((p) => (
-                    <tr key={p.id}>
-                      <td className="mono" style={{ fontSize: '12.5px' }}>
-                        {p.receiptNo}
-                      </td>
-                      <td className="mono" style={{ fontSize: '12.5px', color: 'var(--ink-2)' }}>
-                        {p.paidAt.slice(0, 10)}
-                      </td>
-                      <td>
-                        <b style={{ fontWeight: 600 }}>{p.studentName}</b>
-                      </td>
-                      <td className="num" style={{ color: 'var(--success-ink)', fontWeight: 650 }}>
-                        {formatMoney(p.amount)}
-                      </td>
-                      <td>
-                        <span className={`mode-chip mode-${p.mode.toLowerCase()}`}>{MODE_LABEL[p.mode]}</span>
-                      </td>
-                    </tr>
-                  ))}
+                  {list.map((p) => {
+                    const open = openId === p.id;
+                    return (
+                      <Fragment key={p.id}>
+                        <tr
+                          className="pay-row"
+                          onClick={() => setOpenId(open ? null : p.id)}
+                          style={{ cursor: 'pointer', background: open ? 'var(--green-soft)' : undefined }}
+                        >
+                          <td className="mono" style={{ fontSize: '12.5px' }}>
+                            {p.receiptNo}
+                          </td>
+                          <td className="mono" style={{ fontSize: '12.5px', color: 'var(--ink-2)' }}>
+                            {p.paidAt.slice(0, 10)}
+                          </td>
+                          <td>
+                            <b style={{ fontWeight: 600 }}>{p.studentName}</b>
+                          </td>
+                          <td className="num" style={{ color: 'var(--success-ink)', fontWeight: 650 }}>
+                            {formatMoney(p.amount)}
+                          </td>
+                          <td>
+                            <span className={`mode-chip mode-${p.mode.toLowerCase()}`}>{MODE_LABEL[p.mode]}</span>
+                          </td>
+                          <td className="num" style={{ color: 'var(--ink-3)' }}>
+                            <span style={{ display: 'inline-flex', transform: open ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }}>
+                              <Icon name="chevron" size={16} />
+                            </span>
+                          </td>
+                        </tr>
+                        {open && (
+                          <tr className="pay-detail-row">
+                            <td colSpan={6} style={{ padding: '4px 14px 14px', background: 'var(--green-soft)' }}>
+                              {p.description && (
+                                <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>{p.description}</div>
+                              )}
+                              <PaymentBreakdownDetail id={p.id} />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
