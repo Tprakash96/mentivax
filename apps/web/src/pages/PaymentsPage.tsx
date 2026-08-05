@@ -742,6 +742,12 @@ function RecordPaymentModal({
     () => (!editing && studentId ? loadDues(api, studentId) : Promise.resolve<Due[]>([])),
     [studentId, editing],
   );
+  // One entry per fee (name + total pending) for the "clear first" checkbox list.
+  const feeSummary = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of dues.data ?? []) m.set(d.feeName, (m.get(d.feeName) ?? 0) + d.pending);
+    return [...m.entries()].map(([feeName, pending]) => ({ feeName, pending }));
+  }, [dues.data]);
   // Fees ticked to be cleared first from the amount (rest goes oldest-first).
   const [fullFees, setFullFees] = useState<Set<string>>(new Set());
   // Fresh student → clear the ticks and any manual split.
@@ -915,15 +921,7 @@ function RecordPaymentModal({
                       return (
                         <div className={`pba-group${eligible ? '' : ' alloc-off'}`} key={g.lineId}>
                           <div className="pba-title">
-                            <label className="pba-check" title="Clear this fee first from the amount">
-                              <input
-                                type="checkbox"
-                                checked={fullFees.has(g.feeName)}
-                                disabled={agg.pending === 0}
-                                onChange={() => toggleFullFee(g.feeName)}
-                              />
-                              <span>{g.feeName}</span>
-                            </label>
+                            <span>{g.feeName}</span>
                             <span className="pba-title-right">
                               <span className="pba-pay">
                                 Pay ₹
@@ -943,7 +941,7 @@ function RecordPaymentModal({
                           </div>
                           <div className="pba-note">
                             <Icon name="info" size={13} />
-                            Tick to clear this fee first, or type an exact amount — either settles the oldest period first.
+                            Type what to pay for this fee — it settles the oldest period first.
                           </div>
                           <div className="card-t" style={{ overflowX: 'auto' }}>
                             <table className="fs-tbl">
@@ -1018,19 +1016,6 @@ function RecordPaymentModal({
                   <StudentPicker students={list} value={studentId} onChange={setStudentId} />
                 )}
               </div>
-              {showPreview && fullFees.size > 0 && (
-                <div className="fld">
-                  <label>Cleared first</label>
-                  <div className="pay-chips">
-                    {[...fullFees].map((n) => (
-                      <button type="button" key={n} className="pay-chip" onClick={() => toggleFullFee(n)}>
-                        {n}
-                        <Icon name="x" size={12} />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
               <div className="frow" style={{ gridTemplateColumns: '1fr 1fr' }}>
                 <div className="fld">
                   <label>
@@ -1069,6 +1054,26 @@ function RecordPaymentModal({
                   </select>
                 </div>
               </div>
+
+              {showPreview && feeSummary.length > 0 && (
+                <div className="fld">
+                  <label>Clear these fees first (optional)</label>
+                  <div className="fee-checks">
+                    {feeSummary.map((f) => (
+                      <label key={f.feeName} className={`fee-check${f.pending === 0 ? ' off' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={fullFees.has(f.feeName)}
+                          disabled={f.pending === 0}
+                          onChange={() => toggleFullFee(f.feeName)}
+                        />
+                        <span className="fee-check-name">{f.feeName}</span>
+                        <span className="fee-check-amt mono">{formatMoney(f.pending)}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {showPreview && (
                 <div className="alloc-sums" style={{ gridTemplateColumns: '1fr', gap: 10 }}>
