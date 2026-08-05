@@ -563,6 +563,28 @@ function parseCsv(text: string): string[][] {
   return rows.filter((r) => r.some((x) => x.trim() !== ''));
 }
 
+/** Column labels we know how to map — used to locate the real header row. */
+const HEADER_KEYS = [
+  'name', 'student', 'class', 'standard', 'std', 'guardian', 'parent',
+  'father', 'mother', 'phone', 'mobile', 'contact', 'admission', 'email',
+];
+
+/**
+ * Find the header row in a grid that may carry title/notes rows above the table
+ * (common in "sample" spreadsheets). A header is the first row with a name-ish
+ * column AND at least two known labels in *separate* cells — so a prose line
+ * (one long cell) is never mistaken for a header. Returns -1 when none is found.
+ */
+function findHeaderRow(grid: string[][]): number {
+  for (let i = 0; i < Math.min(grid.length, 25); i++) {
+    const cells = (grid[i] ?? []).map((c) => c.trim().toLowerCase());
+    const known = cells.filter((c) => c && HEADER_KEYS.some((k) => c === k || c.includes(k))).length;
+    const hasName = cells.some((c) => c === 'name' || c === 'student' || c.includes('name'));
+    if (hasName && known >= 2) return i;
+  }
+  return -1;
+}
+
 interface ImportRow {
   name: string;
   className: string;
@@ -589,13 +611,18 @@ function ImportStudentsModal({ onClose, onDone }: { onClose: () => void; onDone:
   };
 
   const applyGrid = (grid: string[][]) => {
-    if (grid.length < 2) {
+    // Drop fully-blank rows, then start at the real header — a file can carry
+    // title/notes lines above the table, and we must not read those as students.
+    const cleaned = grid.filter((r) => r.some((c) => c.trim() !== ''));
+    const hIdx = findHeaderRow(cleaned);
+    const body = hIdx >= 0 ? cleaned.slice(hIdx) : cleaned;
+    if (body.length < 2) {
       setRows([]);
-      setParseError('No student rows found — the file needs a header row plus at least one student.');
+      setParseError('No student rows found — the file needs a header row (Name, Class, …) plus at least one student.');
       return;
     }
     setParseError(null);
-    const header = grid[0]!.map((h) => h.trim().toLowerCase());
+    const header = body[0]!.map((h) => h.trim().toLowerCase());
     const col = (...names: string[]) => {
       for (const n of names) {
         const i = header.findIndex((h) => h === n || h.includes(n));
@@ -608,7 +635,7 @@ function ImportStudentsModal({ onClose, onDone }: { onClose: () => void; onDone:
     const iParent = col('guardian', 'parent', 'father', 'mother');
     const iPhone = col('phone', 'mobile', 'contact');
     const iAdm = col('admission', 'new', 'type');
-    const parsed: ImportRow[] = grid.slice(1).map((r) => {
+    const parsed: ImportRow[] = body.slice(1).map((r) => {
       const className = (iClass >= 0 ? r[iClass] : '')?.trim() ?? '';
       const admRaw = (iAdm >= 0 ? r[iAdm] : '')?.trim().toLowerCase() ?? '';
       return {
@@ -637,14 +664,18 @@ function ImportStudentsModal({ onClose, onDone }: { onClose: () => void; onDone:
         const buf = await f.arrayBuffer();
         const XLSX = await import('xlsx');
         const wb = XLSX.read(buf, { type: 'array' });
-        const sheetName = wb.SheetNames[0];
-        const ws = sheetName ? wb.Sheets[sheetName] : undefined;
-        const grid = ws
-          ? (XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '', raw: false }) as unknown[][]).map(
-              (r) => (Array.isArray(r) ? r.map((c) => String(c ?? '')) : []),
-            )
-          : [];
-        applyGrid(grid);
+        // Read every sheet, then prefer the one that actually has a student
+        // header (ignores a separate "Notes"/"README" sheet); largest wins.
+        const grids = wb.SheetNames.map((name) => {
+          const ws = wb.Sheets[name];
+          if (!ws) return [];
+          return (XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '', raw: false }) as unknown[][])
+            .map((r) => (Array.isArray(r) ? r.map((c) => String(c ?? '')) : []))
+            .filter((r) => r.some((c) => c.trim() !== ''));
+        });
+        const withHeader = grids.filter((g) => findHeaderRow(g) >= 0);
+        const chosen = [...(withHeader.length ? withHeader : grids)].sort((a, b) => b.length - a.length)[0] ?? [];
+        applyGrid(chosen);
       } catch {
         setRows([]);
         setParseError('Could not read that spreadsheet. Try re-saving it as .xlsx or .csv.');
