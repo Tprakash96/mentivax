@@ -137,35 +137,32 @@ function allocateManual(dues: Due[], payByLine: Record<string, number>) {
 }
 
 /**
- * Priority split: ticked fees are cleared *first* (in full, oldest period first),
- * then whatever's left of the amount flows to the un-ticked fees oldest-first.
- * Lets a parent say "put this ₹20,000 on Books + Uniform, rest on School Fee":
- * tick Books and Uniform, and the remainder lands on the others automatically.
- * With nothing ticked it degrades to a plain oldest-first allocation.
+ * Top-down split: the amount fills the ticked ("pay towards") fees from the top
+ * of the list down — each fee cleared in full (oldest period first) before the
+ * next gets anything. Un-ticked fees are skipped entirely. Every fee is ticked
+ * by default, so a plain amount simply pours top-to-bottom across all dues.
  */
-function allocatePriority(dues: Due[], amountPaise: number, fullFees: Set<string>) {
+function allocateTopDown(dues: Due[], amountPaise: number, excluded: Set<string>) {
   let rem = amountPaise;
   const payByKey: Record<string, number> = {};
-  // Two passes over the same order: ticked fees first, then the rest.
-  for (const ticked of [true, false]) {
-    for (const d of dues) {
-      if (fullFees.has(d.feeName) !== ticked || d.pending <= 0) continue;
-      const pay = Math.min(rem, d.pending);
-      payByKey[d.key] = pay;
-      rem -= pay;
-    }
+  for (const d of dues) {
+    if (excluded.has(d.feeName) || d.pending <= 0) continue;
+    const pay = Math.min(rem, d.pending);
+    payByKey[d.key] = pay;
+    rem -= pay;
   }
   const rows: AllocRow[] = dues.map((d) => {
     const payNow = payByKey[d.key] ?? 0;
-    return { ...d, payNow, balance: d.pending - payNow, eligible: true };
+    return { ...d, payNow, balance: d.pending - payNow, eligible: !excluded.has(d.feeName) };
   });
   const pendingBefore = dues.reduce((s, d) => s + d.pending, 0);
+  const selectedPending = dues.reduce((s, d) => s + (excluded.has(d.feeName) ? 0 : d.pending), 0);
   const advance = Math.max(0, rem);
   const payingNow = amountPaise - advance;
   return {
     rows,
     pendingBefore,
-    selectedPending: pendingBefore,
+    selectedPending,
     payingNow,
     pendingAfter: Math.max(0, pendingBefore - payingNow),
     advance,
@@ -748,25 +745,26 @@ function RecordPaymentModal({
     for (const d of dues.data ?? []) m.set(d.feeName, (m.get(d.feeName) ?? 0) + d.pending);
     return [...m.entries()].map(([feeName, pending]) => ({ feeName, pending }));
   }, [dues.data]);
-  // Fees ticked to be cleared first from the amount (rest goes oldest-first).
-  const [fullFees, setFullFees] = useState<Set<string>>(new Set());
-  // Fresh student → clear the ticks and any manual split.
+  // Fees the user un-ticked (skipped). Empty = every fee is paid towards, so all
+  // boxes are checked by default and the amount fills them top-to-bottom.
+  const [excludedFees, setExcludedFees] = useState<Set<string>>(new Set());
+  // Fresh student → pay towards every fee again, and drop any manual split.
   useEffect(() => {
-    setFullFees(new Set());
+    setExcludedFees(new Set());
     setManualMode(false);
     setManualPay({});
   }, [dues.data]);
 
-  // Auto split: clear ticked fees first, then spill the rest oldest-first.
+  // Auto split: pour the amount top-to-bottom across the still-ticked fees.
   const autoAlloc = useMemo(
-    () => allocatePriority(dues.data ?? [], rupeesToPaise(amount), fullFees),
-    [dues.data, amount, fullFees],
+    () => allocateTopDown(dues.data ?? [], rupeesToPaise(amount), excludedFees),
+    [dues.data, amount, excludedFees],
   );
   // Tick/untick a fee: also drop any manual split so the amount re-drives.
-  const toggleFullFee = (feeName: string) => {
+  const toggleExcluded = (feeName: string) => {
     setManualMode(false);
     setManualPay({});
-    setFullFees((s) => {
+    setExcludedFees((s) => {
       const next = new Set(s);
       if (next.has(feeName)) next.delete(feeName);
       else next.add(feeName);
@@ -1057,15 +1055,15 @@ function RecordPaymentModal({
 
               {showPreview && feeSummary.length > 0 && (
                 <div className="fld">
-                  <label>Clear these fees first (optional)</label>
+                  <label>Fees to pay towards (untick to skip)</label>
                   <div className="fee-checks">
                     {feeSummary.map((f) => (
                       <label key={f.feeName} className={`fee-check${f.pending === 0 ? ' off' : ''}`}>
                         <input
                           type="checkbox"
-                          checked={fullFees.has(f.feeName)}
+                          checked={f.pending > 0 && !excludedFees.has(f.feeName)}
                           disabled={f.pending === 0}
-                          onChange={() => toggleFullFee(f.feeName)}
+                          onChange={() => toggleExcluded(f.feeName)}
                         />
                         <span className="fee-check-name">{f.feeName}</span>
                         <span className="fee-check-amt mono">{formatMoney(f.pending)}</span>
