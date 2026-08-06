@@ -170,8 +170,9 @@ function allocateTopDown(dues: Due[], amountPaise: number, excluded: Set<string>
 }
 
 export function PaymentsPage() {
-  const { api } = useApi();
+  const { api, can } = useApi();
   const toast = useToast();
+  const [voidingId, setVoidingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
   const [invOpen, setInvOpen] = useState(false);
@@ -191,6 +192,22 @@ export function PaymentsPage() {
   const reloadAll = () => {
     summary.reload();
     payments.reload();
+  };
+
+  // Void a payment: reverses its allocations on the invoices it paid and marks
+  // it inactive (Collected / Balance due follow). Reversible-safe, but confirm first.
+  const voidPayment = async (p: Payment) => {
+    if (!window.confirm(`Void payment ${p.receiptNo} (${p.studentName}, ${formatMoney(p.amount)})? This reverses it from the invoices it paid.`)) return;
+    setVoidingId(p.id);
+    try {
+      await api.payments.deactivate(p.id);
+      reloadAll();
+      toast(`Payment ${p.receiptNo} voided`);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not void payment');
+    } finally {
+      setVoidingId(null);
+    }
   };
 
   return (
@@ -313,6 +330,17 @@ export function PaymentsPage() {
                         <Icon name="eye" size={13} />
                         View
                       </button>
+                      {p.isActive && can('payments:delete') && (
+                        <button
+                          className="btn sm danger"
+                          disabled={voidingId === p.id}
+                          onClick={() => voidPayment(p)}
+                          title="Void this payment"
+                        >
+                          <Icon name="x" size={13} />
+                          {voidingId === p.id ? 'Voiding…' : 'Void'}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

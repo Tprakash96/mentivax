@@ -318,6 +318,20 @@ h4,
 .btn.ghost:hover {
   background: var(--paper);
 }
+.btn.danger {
+  background: var(--red-soft);
+  border-color: transparent;
+  color: var(--red);
+}
+.btn.danger:hover {
+  background: var(--red);
+  border-color: transparent;
+  color: #fff;
+}
+.btn.danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 .btn.sm {
   height: 30px;
   padding: 0 11px;
