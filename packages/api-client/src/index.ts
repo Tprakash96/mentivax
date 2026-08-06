@@ -190,6 +190,11 @@ export function createClient(opts: ClientOptions) {
     return doFetch(`${opts.baseUrl}${path}`, {
       method,
       headers,
+      // Never let the browser serve a stale API response from its HTTP cache —
+      // Express sends weak ETags with no Cache-Control, so an identical GET after
+      // a mutation (e.g. re-listing right after a delete) could return the old
+      // body until a hard refresh. no-store forces a real request every time.
+      cache: 'no-store',
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   }
