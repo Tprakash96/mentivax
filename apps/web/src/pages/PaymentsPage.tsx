@@ -8,15 +8,19 @@ import { useToast } from '../components/Toast';
 import { useApi } from '../lib/api';
 import { useAsync } from '../lib/useAsync';
 
-const MODES: { value: PaymentMode; label: string }[] = [
-  { value: 'CASH', label: 'Cash' },
-  { value: 'UPI', label: 'UPI / GPay' },
-  { value: 'BANK_TRANSFER', label: 'Bank transfer' },
-  { value: 'CHEQUE', label: 'Cheque' },
-  { value: 'CARD', label: 'Card' },
-];
+const MODE_LABEL: Record<PaymentMode, string> = {
+  CASH: 'Cash',
+  UPI: 'UPI / GPay',
+  BANK_TRANSFER: 'Bank transfer',
+  CHEQUE: 'Cheque',
+  CARD: 'Card',
+};
 
-const MODE_LABEL = Object.fromEntries(MODES.map((m) => [m.value, m.label]));
+// Selectable payment modes. Cheque is kept in MODE_LABEL so any historical
+// cheque record still renders, but is no longer offered when recording a payment.
+const MODES: { value: PaymentMode; label: string }[] = (['CASH', 'UPI', 'BANK_TRANSFER', 'CARD'] as PaymentMode[]).map(
+  (value) => ({ value, label: MODE_LABEL[value] }),
+);
 
 /**
  * A single due unit for a student — one *period* of a fee line (or the whole
