@@ -548,25 +548,69 @@ export function InvoicesDetailModal({ onClose, scope }: { onClose: () => void; s
 }
 
 /** Read-only list of every collected payment, opened from the Collected card. */
+/** One "Fully paid" / "Partially paid" group of collected invoices. */
+function CollectedGroup({ title, tone, rows }: { title: string; tone: 'full' | 'partial'; rows: Invoice[] }) {
+  if (rows.length === 0) return null;
+  const subtotal = rows.reduce((n, v) => n + v.paidAmount, 0);
+  return (
+    <>
+      <div className={`coll-sec ${tone}`}>
+        <span>
+          {title} <span className="coll-n">{rows.length}</span>
+        </span>
+        <b>{formatMoney(subtotal)} collected</b>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Invoice</th>
+            <th>Student</th>
+            <th>Class</th>
+            <th className="num">Invoiced</th>
+            <th className="num">Paid</th>
+            {tone === 'partial' && <th className="num">Still due</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((v) => (
+            <tr key={v.id}>
+              <td className="mono" style={{ fontSize: '12.5px' }}>{v.number}</td>
+              <td><b style={{ fontWeight: 600 }}>{v.studentName}</b></td>
+              <td><span className="cls">{v.className}</span></td>
+              <td className="num mono" style={{ color: 'var(--ink-3)' }}>{formatMoney(v.netAmount)}</td>
+              <td className="num mono" style={{ color: 'var(--success-ink)', fontWeight: 650 }}>{formatMoney(v.paidAmount)}</td>
+              {tone === 'partial' && (
+                <td className="num mono" style={{ color: 'var(--red-fig)', fontWeight: 600 }}>
+                  {formatMoney(Math.max(0, v.netAmount - v.paidAmount))}
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
 export function CollectedDetailModal({ onClose, scope }: { onClose: () => void; scope?: Invoice[] }) {
   const { api } = useApi();
-  const payments = useAsync(() => (scope ? Promise.resolve([]) : api.payments.list()), []);
-  // Which payment row is expanded to show its period-wise breakdown.
-  const [openId, setOpenId] = useState<string | null>(null);
-  // Scoped view: collected per matching invoice. Global view: every payment receipt.
-  const collectedInvoices = (scope ?? []).filter((v) => v.paidAmount > 0);
-  const list = payments.data ?? [];
-  const total = scope
-    ? collectedInvoices.reduce((n, v) => n + v.paidAmount, 0)
-    : list.reduce((n, p) => n + p.amount, 0);
+  const invoices = useAsync(() => (scope ? Promise.resolve(scope) : api.invoices.list()), []);
+  const source = invoices.data ?? [];
+  // Only invoices that have received money, split by whether they're settled.
+  const collected = source.filter((v) => v.paidAmount > 0);
+  const fully = collected.filter((v) => v.paidAmount >= v.netAmount);
+  const partial = collected.filter((v) => v.paidAmount < v.netAmount);
+  const total = collected.reduce((n, v) => n + v.paidAmount, 0);
 
   return (
     <div className="scrim" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 760, width: '94%' }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 780, width: '94%' }}>
         <div className="mh">
           <div>
-            <b>Collected{scope ? ` · ${collectedInvoices.length}` : list.length ? ` · ${list.length} payments` : ''}</b>
-            <span>{scope ? 'Collected on matching invoices' : 'Every payment received this year'} — {formatMoney(total)} total</span>
+            <b>Collected{collected.length ? ` · ${collected.length} invoice${collected.length === 1 ? '' : 's'}` : ''}</b>
+            <span>
+              {formatMoney(total)} collected — {fully.length} fully paid, {partial.length} partially paid
+            </span>
           </div>
           <button className="x" onClick={onClose}>
             <Icon name="x" />
@@ -574,92 +618,11 @@ export function CollectedDetailModal({ onClose, scope }: { onClose: () => void; 
         </div>
         <div className="mb" style={{ padding: 0 }}>
           <div className="card-t" style={{ border: 'none', boxShadow: 'none', borderRadius: 0, minHeight: 0, overflowY: 'auto' }}>
-            {scope ? (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Invoice</th>
-                    <th>Student</th>
-                    <th>Class</th>
-                    <th className="num">Paid</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {collectedInvoices.map((v) => (
-                    <tr key={v.id}>
-                      <td className="mono" style={{ fontSize: '12.5px' }}>{v.number}</td>
-                      <td><b style={{ fontWeight: 600 }}>{v.studentName}</b></td>
-                      <td><span className="cls">{v.className}</span></td>
-                      <td className="num" style={{ color: 'var(--success-ink)', fontWeight: 650 }}>{formatMoney(v.paidAmount)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Receipt</th>
-                    <th>Date</th>
-                    <th>Student</th>
-                    <th className="num">Amount</th>
-                    <th>Mode</th>
-                    <th aria-label="expand" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {list.map((p) => {
-                    const open = openId === p.id;
-                    return (
-                      <Fragment key={p.id}>
-                        <tr
-                          className="pay-row"
-                          onClick={() => setOpenId(open ? null : p.id)}
-                          style={{ cursor: 'pointer', background: open ? 'var(--green-soft)' : undefined }}
-                        >
-                          <td className="mono" style={{ fontSize: '12.5px' }}>
-                            {p.receiptNo}
-                          </td>
-                          <td className="mono" style={{ fontSize: '12.5px', color: 'var(--ink-2)' }}>
-                            {p.paidAt.slice(0, 10)}
-                          </td>
-                          <td>
-                            <b style={{ fontWeight: 600 }}>{p.studentName}</b>
-                          </td>
-                          <td className="num" style={{ color: 'var(--success-ink)', fontWeight: 650 }}>
-                            {formatMoney(p.amount)}
-                          </td>
-                          <td>
-                            <span className={`mode-chip mode-${p.mode.toLowerCase()}`}>{MODE_LABEL[p.mode]}</span>
-                          </td>
-                          <td className="num" style={{ color: 'var(--ink-3)' }}>
-                            <span style={{ display: 'inline-flex', transform: open ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }}>
-                              <Icon name="chevron" size={16} />
-                            </span>
-                          </td>
-                        </tr>
-                        {open && (
-                          <tr className="pay-detail-row">
-                            <td colSpan={6} style={{ padding: '4px 14px 14px', background: 'var(--green-soft)' }}>
-                              {p.description && (
-                                <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>{p.description}</div>
-                              )}
-                              <PaymentBreakdownDetail id={p.id} />
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
+            <CollectedGroup title="Fully paid" tone="full" rows={fully} />
+            <CollectedGroup title="Partially paid" tone="partial" rows={partial} />
           </div>
-          {payments.loading && <div className="state">Loading payments…</div>}
-          {scope && collectedInvoices.length === 0 && <div className="state">Nothing collected on these invoices yet.</div>}
-          {!scope && !payments.loading && list.length === 0 && (
-            <div className="state">No payments collected yet.</div>
-          )}
+          {invoices.loading && <div className="state">Loading…</div>}
+          {!invoices.loading && collected.length === 0 && <div className="state">Nothing collected yet.</div>}
         </div>
         <div className="mf">
           <button className="btn" onClick={onClose}>

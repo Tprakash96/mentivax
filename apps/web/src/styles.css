@@ -332,6 +332,47 @@ h4,
   opacity: 0.6;
   cursor: not-allowed;
 }
+.coll-sec {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--green-soft);
+  border-top: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.coll-sec.partial {
+  background: var(--red-soft);
+}
+.coll-sec b {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.coll-sec.full b {
+  color: var(--success-ink);
+}
+.coll-sec.partial b {
+  color: var(--red);
+}
+.coll-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  margin-left: 4px;
+  font-size: 11px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink-2);
+}
 .btn.sm {
   height: 30px;
   padding: 0 11px;
