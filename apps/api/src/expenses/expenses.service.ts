@@ -131,10 +131,21 @@ export class ExpensesService {
     const prefix = kind === 'INCOME' ? 'RV' : 'PV';
     // Year tag from the active academic-year label, e.g. "2026-27" → "2627".
     const yearTag = (t.academicYearLabel || '').replace(/\D/g, '').slice(0, 4) || '0000';
-    const count = await this.prisma.ledgerEntry.count({
-      where: { organizationId: t.organizationId, kind },
+    const base = `${prefix}-${yearTag}-`;
+    // Increment past the highest suffix already used for this prefix+year —
+    // across active *and* soft-deleted rows, since voucherNo is unique over all
+    // of them. A plain count breaks the moment any entry is removed (it drops
+    // below an existing number and collides on the unique constraint).
+    const rows = await this.prisma.ledgerEntry.findMany({
+      where: { organizationId: t.organizationId, voucherNo: { startsWith: base } },
+      select: { voucherNo: true },
     });
-    return `${prefix}-${yearTag}-${String(count + 101).padStart(3, '0')}`;
+    let max = 100;
+    for (const r of rows) {
+      const n = Number.parseInt(r.voucherNo.slice(base.length), 10);
+      if (Number.isFinite(n) && n > max) max = n;
+    }
+    return `${base}${String(max + 1).padStart(3, '0')}`;
   }
 
   async listEntries(
