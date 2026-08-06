@@ -225,7 +225,11 @@ export function createClient(opts: ClientOptions) {
       throw new ApiError(res.status, message, payload);
     }
     if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
+    // Some endpoints (deletes, other void handlers) reply 200 with an empty
+    // body; res.json() would throw on that. Read as text and only parse when
+    // there's something, so a successful call never rejects on an empty reply.
+    const text = await res.text();
+    return (text ? JSON.parse(text) : undefined) as T;
   }
 
   const q = (params: Record<string, string | undefined>) => {
