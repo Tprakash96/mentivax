@@ -14,6 +14,7 @@ import { YearRolloverPage } from './pages/YearRolloverPage';
 import { InvoicesPage } from './pages/InvoicesPage';
 import { BillingWizard } from './pages/BillingWizard';
 import { PaymentsPage } from './pages/PaymentsPage';
+import { CollectedPage } from './pages/CollectedPage';
 import { ExpensesPage } from './pages/ExpensesPage';
 import { StaffPage } from './pages/StaffPage';
 import { SetupPage } from './pages/SetupPage';
@@ -74,7 +75,7 @@ const CONTEXTS: ModuleContext[] = [
     key: 'fees',
     code: 'FE',
     label: 'Fees & collections',
-    match: ['/invoices', '/payments', '/fees-structure', '/mappings'],
+    match: ['/invoices', '/payments', '/collected', '/fees-structure', '/mappings'],
     items: [
       { to: '/invoices', label: 'Invoices', icon: 'invoice', module: 'fees', permission: 'invoices:read' },
       { to: '/payments', label: 'Payments', icon: 'card', module: 'fees', permission: 'payments:read' },
@@ -144,6 +145,7 @@ const TITLES: Record<string, { title: string; sub: string }> = {
   '/invoices/new': { title: 'New class billing', sub: 'Bill a whole class in one pass' },
   '/invoices/generate': { title: 'Add invoice', sub: 'Pick a standard, review discounts & exemptions, then bill' },
   '/payments': { title: 'Payments', sub: 'Record and reconcile collections' },
+  '/collected': { title: 'Collected', sub: 'Payments received, by settlement status' },
   '/expenses': { title: 'Expenses & accounts', sub: 'Day book, approvals, statement and reports' },
   '/staff': { title: 'Staff & payroll', sub: 'Register, attendance, leave, payroll and payslips' },
   '/setup': { title: 'School Setup', sub: 'Configure your school step by step' },
@@ -500,6 +502,7 @@ export function App() {
               <Route path="/invoices/new" element={<Gate module="fees" permission="invoices:write"><BillingWizard /></Gate>} />
               <Route path="/invoices/generate" element={<Navigate to="/invoices" replace />} />
               <Route path="/payments" element={<Gate module="fees" permission="payments:read"><PaymentsPage /></Gate>} />
+              <Route path="/collected" element={<Gate module="fees" permission="payments:read"><CollectedPage /></Gate>} />
               <Route path="/expenses" element={<Gate module="expenses" permission="expenses:read"><ExpensesPage /></Gate>} />
               <Route path="/staff" element={<Gate module="staff" permission="staff:read"><StaffPage /></Gate>} />
               <Route path="/fees-structure" element={<Gate module="fees" permission="fees:read"><FeesStructurePage /></Gate>} />

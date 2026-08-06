@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { formatMoney, paiseToRupees, rupeesToPaise, type FeePeriod, type PaymentMode } from '@mentivax/core';
 import type { Invoice, MentivaxClient, Payment, Student } from '@mentivax/api-client';
 import { Icon } from '../components/Icon';
@@ -175,12 +176,12 @@ function allocateTopDown(dues: Due[], amountPaise: number, excluded: Set<string>
 
 export function PaymentsPage() {
   const { api, can } = useApi();
+  const navigate = useNavigate();
   const toast = useToast();
   const [voidingId, setVoidingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
   const [invOpen, setInvOpen] = useState(false);
-  const [collectedOpen, setCollectedOpen] = useState(false);
   const [dueOpen, setDueOpen] = useState(false);
   const [editing, setEditing] = useState<Payment | null>(null);
   const [viewing, setViewing] = useState<Payment | null>(null);
@@ -236,7 +237,7 @@ export function PaymentsPage() {
             {s?.invoiceCount ?? 0} invoices issued <span className="viewhint">· view details ›</span>
           </div>
         </button>
-        <button className="paycard paid clickable" onClick={() => setCollectedOpen(true)}>
+        <button className="paycard paid clickable" onClick={() => navigate('/collected')}>
           <div className="h">
             <span className="ic" style={{ background: 'var(--green-soft)', color: 'var(--green-ink)' }}>
               <Icon name="check" size={16} />
@@ -397,7 +398,6 @@ export function PaymentsPage() {
       )}
       {viewing && <PaymentViewModal p={viewing} onClose={() => setViewing(null)} />}
       {invOpen && <InvoicesDetailModal onClose={() => setInvOpen(false)} />}
-      {collectedOpen && <CollectedDetailModal onClose={() => setCollectedOpen(false)} />}
       {dueOpen && <BalanceDueDetailModal onClose={() => setDueOpen(false)} />}
     </>
   );
