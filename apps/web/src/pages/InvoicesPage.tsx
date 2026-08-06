@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { formatMoney, paiseToRupees, rupeesToPaise, type FeePeriod, type InvoiceStatus } from '@mentivax/core';
-import type { Invoice, InvoiceLine } from '@mentivax/api-client';
+import { formatMoney, paiseToRupees, rupeesToPaise, type FeePeriod, type FeeScope, type InvoiceStatus } from '@mentivax/core';
+import type { Invoice, InvoiceLine, Student } from '@mentivax/api-client';
 import { Icon } from '../components/Icon';
 import { Pagination, usePager } from '../components/Pagination';
 import { useToast } from '../components/Toast';
 import { useApi } from '../lib/api';
 import { useAsync } from '../lib/useAsync';
+import { findHeaderRow, readFileToGrid, SPREADSHEET_ACCEPT } from '../lib/spreadsheet';
 import { AddInvoiceModal } from './GenerateInvoicesPage';
 import { InvoicesDetailModal, CollectedDetailModal, BalanceDueDetailModal } from './PaymentsPage';
 
@@ -32,8 +33,10 @@ export function InvoicesPage() {
   const { api } = useApi();
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const toast = useToast();
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [statOpen, setStatOpen] = useState<null | 'billed' | 'collected' | 'pending'>(null);
   const [editRow, setEditRow] = useState<Invoice | null>(null);
@@ -99,6 +102,10 @@ export function InvoicesPage() {
           <Icon name="search" />
           <input placeholder="Search invoice, student…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
+        <button className="btn" onClick={() => setImportOpen(true)}>
+          <Icon name="import" size={15} />
+          Import
+        </button>
         <button className="btn grn" onClick={() => setAddOpen(true)}>
           <Icon name="plus" size={15} />
           Add invoice
@@ -111,6 +118,17 @@ export function InvoicesPage() {
           onDone={() => {
             setAddOpen(false);
             reload();
+          }}
+        />
+      )}
+
+      {importOpen && (
+        <ImportInvoicesModal
+          onClose={() => setImportOpen(false)}
+          onDone={(n) => {
+            setImportOpen(false);
+            reload();
+            toast(`${n} invoice${n === 1 ? '' : 's'} created`);
           }}
         />
       )}
@@ -576,6 +594,304 @@ function InvoiceDetailModal({ id, onClose }: { id: string; onClose: () => void }
           <button className="btn" onClick={onClose}>
             Close
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Column labels the invoice importer knows, and its identity columns. */
+const INVOICE_KEYS = [
+  'admission', 'adm', 'student', 'name', 'class', 'standard', 'std',
+  'fee', 'fees', 'scope', 'type', 'issue', 'due', 'date', 'discount', 'concession', 'reason',
+];
+const INVOICE_ID_KEYS = ['admission', 'adm', 'student', 'name'];
+
+/** Only pass a date through if it's already an ISO day the API accepts. */
+function isoDay(s: string): string | undefined {
+  const t = s.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : undefined;
+}
+
+interface ImportInvoiceRow {
+  label: string;
+  studentId: string | null;
+  studentName: string;
+  className: string;
+  feeScope: FeeScope;
+  issueDate?: string;
+  dueDate?: string;
+  discountType?: 'PERCENT' | 'FLAT';
+  discountValue?: number;
+  discountReason?: string;
+  error?: string;
+}
+
+/**
+ * Bulk-import invoices from a CSV/Excel file. Each row names a student (by
+ * admission number or name); the server derives every fee line from that
+ * student's class fee structure, so the sheet only needs an identity column,
+ * with optional Fees scope / Discount / dates.
+ */
+function ImportInvoicesModal({ onClose, onDone }: { onClose: () => void; onDone: (n: number) => void }) {
+  const { api } = useApi();
+  const students = useAsync(() => api.students.list({}), []);
+  const [rows, setRows] = useState<ImportInvoiceRow[]>([]);
+  const [fileName, setFileName] = useState('');
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<{ created: number; failed: { name: string; error: string }[] } | null>(null);
+
+  const roster = students.data ?? [];
+  // Resolve a row to a studentId: admission number first (unique), then name
+  // (with the Class column breaking ties between same-named students).
+  const resolve = (adm: string, name: string, className: string): { id: string | null; student?: Student; error?: string } => {
+    const a = adm.trim().toLowerCase();
+    if (a) {
+      const byAdm = roster.filter((s) => s.admissionNo.toLowerCase() === a);
+      if (byAdm.length === 1) return { id: byAdm[0]!.id, student: byAdm[0] };
+      if (byAdm.length > 1) return { id: null, error: `Admission no "${adm}" matches ${byAdm.length} students` };
+    }
+    const n = name.trim().toLowerCase();
+    if (!n) return { id: null, error: a ? `No student with admission no "${adm}"` : 'Row has no name or admission no' };
+    let byName = roster.filter((s) => s.name.toLowerCase() === n);
+    const c = className.trim().toLowerCase();
+    if (byName.length > 1 && c) byName = byName.filter((s) => s.className.toLowerCase() === c);
+    if (byName.length === 1) return { id: byName[0]!.id, student: byName[0] };
+    if (byName.length > 1) return { id: null, error: `"${name}" matches ${byName.length} students — add a Class column` };
+    return { id: null, error: `No student named "${name}"` };
+  };
+
+  const applyGrid = (grid: string[][]) => {
+    const cleaned = grid.filter((r) => r.some((c) => c.trim() !== ''));
+    const hIdx = findHeaderRow(cleaned, INVOICE_KEYS, INVOICE_ID_KEYS);
+    const body = hIdx >= 0 ? cleaned.slice(hIdx) : cleaned;
+    if (body.length < 2) {
+      setRows([]);
+      setParseError('No rows found — the file needs a header row (Admission No or Name) plus at least one student.');
+      return;
+    }
+    setParseError(null);
+    const header = body[0]!.map((h) => h.trim().toLowerCase());
+    const col = (...names: string[]) => {
+      for (const nm of names) {
+        const i = header.findIndex((h) => h === nm || h.includes(nm));
+        if (i >= 0) return i;
+      }
+      return -1;
+    };
+    const iAdm = col('admission', 'adm no', 'admno', 'adm');
+    const iName = col('name', 'student');
+    const iClass = col('class', 'standard', 'std');
+    const iScope = col('fee scope', 'scope', 'fees type', 'fee type', 'fees', 'fee');
+    const iIssue = col('issue');
+    const iDue = col('due');
+    const iDisc = col('discount', 'concession');
+    const iReason = col('reason', 'remark');
+
+    const parsed: ImportInvoiceRow[] = body
+      .slice(1)
+      .map((r) => {
+        const adm = (iAdm >= 0 ? r[iAdm] : '')?.trim() ?? '';
+        const name = (iName >= 0 ? r[iName] : iAdm >= 0 ? '' : r[0])?.trim() ?? '';
+        const className = (iClass >= 0 ? r[iClass] : '')?.trim() ?? '';
+        const res = resolve(adm, name, className);
+        const scopeRaw = ((iScope >= 0 ? r[iScope] : '') ?? '').toLowerCase();
+        const feeScope: FeeScope = scopeRaw.includes('transport')
+          ? 'TRANSPORT'
+          : scopeRaw.includes('academic') || scopeRaw.includes('tuition') || scopeRaw.includes('school')
+            ? 'ACADEMIC'
+            : 'ALL';
+        const discRaw = ((iDisc >= 0 ? r[iDisc] : '') ?? '').trim();
+        let discountType: 'PERCENT' | 'FLAT' | undefined;
+        let discountValue: number | undefined;
+        if (discRaw) {
+          const num = parseFloat(discRaw.replace(/[^0-9.]/g, ''));
+          if (Number.isFinite(num) && num > 0) {
+            if (discRaw.includes('%')) {
+              discountType = 'PERCENT';
+              discountValue = Math.round(num * 100);
+            } else {
+              discountType = 'FLAT';
+              discountValue = rupeesToPaise(num);
+            }
+          }
+        }
+        return {
+          label: adm || name,
+          studentId: res.id,
+          studentName: res.student?.name ?? name ?? adm,
+          className: res.student?.className ?? className,
+          feeScope,
+          issueDate: iIssue >= 0 ? isoDay(r[iIssue] ?? '') : undefined,
+          dueDate: iDue >= 0 ? isoDay(r[iDue] ?? '') : undefined,
+          discountType,
+          discountValue,
+          discountReason: (iReason >= 0 ? r[iReason] : '')?.trim() || undefined,
+          error: res.error,
+        };
+      })
+      .filter((r) => r.label);
+    setRows(parsed);
+    setResult(null);
+  };
+
+  const onFile = async (f: File) => {
+    setFileName(f.name);
+    setParseError(null);
+    try {
+      applyGrid(await readFileToGrid(f, INVOICE_KEYS, INVOICE_ID_KEYS));
+    } catch {
+      setRows([]);
+      setParseError('Could not read that file. Try re-saving it as .xlsx or .csv.');
+    }
+  };
+
+  const valid = rows.filter((r) => r.studentId);
+  const invalid = rows.filter((r) => !r.studentId);
+
+  const runImport = async () => {
+    setImporting(true);
+    const failed: { name: string; error: string }[] = [];
+    let created = 0;
+    for (const r of valid) {
+      try {
+        await api.invoices.createOne({
+          studentId: r.studentId!,
+          feeScope: r.feeScope,
+          ...(r.issueDate ? { issueDate: r.issueDate } : {}),
+          ...(r.dueDate ? { dueDate: r.dueDate } : {}),
+          ...(r.discountType ? { discountType: r.discountType, discountValue: r.discountValue } : {}),
+          ...(r.discountReason ? { discountReason: r.discountReason } : {}),
+        });
+        created++;
+      } catch (e) {
+        failed.push({ name: r.studentName || r.label, error: e instanceof Error ? e.message : 'failed' });
+      }
+    }
+    setImporting(false);
+    setResult({ created, failed });
+    if (failed.length === 0) onDone(created);
+  };
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720, width: '96%' }}>
+        <div className="mh">
+          <div>
+            <b>Import invoices</b>
+            <span>Upload a CSV or Excel file — one invoice per student row</span>
+          </div>
+          <button className="x" onClick={onClose}>
+            <Icon name="x" />
+          </button>
+        </div>
+        <div className="mb" style={{ maxHeight: '72vh', overflowY: 'auto' }}>
+          <div className="import-drop">
+            <input
+              id="invoice-import-file"
+              type="file"
+              accept={SPREADSHEET_ACCEPT}
+              style={{ display: 'none' }}
+              onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+            />
+            <label htmlFor="invoice-import-file" className="import-tile">
+              <span className="import-plus">+</span>
+              <div>
+                <b>{fileName || 'Choose a CSV or Excel file'}</b>
+                <span>Excel (.xlsx, .xls) or CSV · Columns: Admission No or Name · Class · Fees (all/academic/transport) · Discount · Reason</span>
+              </div>
+            </label>
+          </div>
+
+          {parseError && (
+            <div className="state err" style={{ marginTop: 10 }}>
+              {parseError}
+            </div>
+          )}
+
+          {rows.length > 0 && !result && (
+            <>
+              <div className="import-summary">
+                <span className="pos">{valid.length} ready</span>
+                {invalid.length > 0 && <span className="neg">{invalid.length} unmatched</span>}
+              </div>
+              <div className="card-t" style={{ maxHeight: 300, overflowY: 'auto' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Student</th>
+                      <th>Class</th>
+                      <th>Fees</th>
+                      <th>Discount</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr key={i}>
+                        <td>
+                          <b style={{ fontWeight: 600 }}>{r.studentName || r.label}</b>
+                        </td>
+                        <td>{r.className ? <span className="cls">{r.className}</span> : '—'}</td>
+                        <td>{r.feeScope === 'ALL' ? 'All fees' : r.feeScope === 'ACADEMIC' ? 'Academic' : 'Transport'}</td>
+                        <td>
+                          {r.discountType === 'PERCENT'
+                            ? `${(r.discountValue ?? 0) / 100}%`
+                            : r.discountType === 'FLAT'
+                              ? formatMoney(r.discountValue ?? 0)
+                              : '—'}
+                        </td>
+                        <td>
+                          {r.studentId ? (
+                            <span className="tag paid">
+                              <i />
+                              Ready
+                            </span>
+                          ) : (
+                            <span className="tag due" title={r.error}>
+                              <i />
+                              {r.error ?? 'No match'}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {result && (
+            <div className="state" style={{ marginTop: 12 }}>
+              <b className="pos">
+                {result.created} invoice{result.created === 1 ? '' : 's'} created.
+              </b>
+              {result.failed.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <b className="neg">{result.failed.length} failed:</b>
+                  <ul style={{ margin: '6px 0 0 18px' }}>
+                    {result.failed.map((f, i) => (
+                      <li key={i}>
+                        {f.name} — {f.error}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="mf">
+          <button className="btn" onClick={onClose}>
+            {result ? 'Close' : 'Cancel'}
+          </button>
+          {!result && (
+            <button className="btn grn" disabled={valid.length === 0 || importing} onClick={runImport}>
+              {importing ? 'Creating…' : `Import ${valid.length} invoice${valid.length === 1 ? '' : 's'}`}
+            </button>
+          )}
         </div>
       </div>
     </div>

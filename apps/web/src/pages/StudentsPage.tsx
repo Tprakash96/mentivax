@@ -8,6 +8,7 @@ import { Pagination, usePager } from '../components/Pagination';
 import { useToast } from '../components/Toast';
 import { useApi } from '../lib/api';
 import { useAsync } from '../lib/useAsync';
+import { findHeaderRow, readFileToGrid, SPREADSHEET_ACCEPT } from '../lib/spreadsheet';
 
 const SHIFTS: { value: TransportShift; label: string }[] = [
   { value: 'BOTH', label: 'Both ways' },
@@ -530,60 +531,12 @@ function StudentSearch({
   );
 }
 
-/** Minimal CSV parser: handles quoted fields, commas and newlines inside quotes. */
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = '';
-  let inQ = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQ) {
-      if (c === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else inQ = false;
-      } else field += c;
-    } else if (c === '"') inQ = true;
-    else if (c === ',') {
-      row.push(field);
-      field = '';
-    } else if (c === '\n') {
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = '';
-    } else if (c !== '\r') field += c;
-  }
-  if (field.length || row.length) {
-    row.push(field);
-    rows.push(row);
-  }
-  return rows.filter((r) => r.some((x) => x.trim() !== ''));
-}
-
-/** Column labels we know how to map — used to locate the real header row. */
-const HEADER_KEYS = [
+/** Column labels the student importer knows, and the identity columns. */
+const STUDENT_KEYS = [
   'name', 'student', 'class', 'standard', 'std', 'guardian', 'parent',
   'father', 'mother', 'phone', 'mobile', 'contact', 'admission', 'email',
 ];
-
-/**
- * Find the header row in a grid that may carry title/notes rows above the table
- * (common in "sample" spreadsheets). A header is the first row with a name-ish
- * column AND at least two known labels in *separate* cells — so a prose line
- * (one long cell) is never mistaken for a header. Returns -1 when none is found.
- */
-function findHeaderRow(grid: string[][]): number {
-  for (let i = 0; i < Math.min(grid.length, 25); i++) {
-    const cells = (grid[i] ?? []).map((c) => c.trim().toLowerCase());
-    const known = cells.filter((c) => c && HEADER_KEYS.some((k) => c === k || c.includes(k))).length;
-    const hasName = cells.some((c) => c === 'name' || c === 'student' || c.includes('name'));
-    if (hasName && known >= 2) return i;
-  }
-  return -1;
-}
+const STUDENT_ID_KEYS = ['name', 'student'];
 
 interface ImportRow {
   name: string;
@@ -614,7 +567,7 @@ function ImportStudentsModal({ onClose, onDone }: { onClose: () => void; onDone:
     // Drop fully-blank rows, then start at the real header — a file can carry
     // title/notes lines above the table, and we must not read those as students.
     const cleaned = grid.filter((r) => r.some((c) => c.trim() !== ''));
-    const hIdx = findHeaderRow(cleaned);
+    const hIdx = findHeaderRow(cleaned, STUDENT_KEYS, STUDENT_ID_KEYS);
     const body = hIdx >= 0 ? cleaned.slice(hIdx) : cleaned;
     if (body.length < 2) {
       setRows([]);
@@ -651,41 +604,15 @@ function ImportStudentsModal({ onClose, onDone }: { onClose: () => void; onDone:
     setResult(null);
   };
 
-  // Accepts CSV and any spreadsheet Excel can save (.xlsx, .xls, .xlsm, .xlsb,
-  // .ods). CSV is read as text; spreadsheets are decoded with SheetJS, loaded
-  // on demand so the library only ships when someone actually imports a file.
   const onFile = async (f: File) => {
     setFileName(f.name);
     setParseError(null);
-    const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
-    const isSheet = ['xlsx', 'xls', 'xlsm', 'xlsb', 'ods'].includes(ext);
-    if (isSheet) {
-      try {
-        const buf = await f.arrayBuffer();
-        const XLSX = await import('xlsx');
-        const wb = XLSX.read(buf, { type: 'array' });
-        // Read every sheet, then prefer the one that actually has a student
-        // header (ignores a separate "Notes"/"README" sheet); largest wins.
-        const grids = wb.SheetNames.map((name) => {
-          const ws = wb.Sheets[name];
-          if (!ws) return [];
-          return (XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '', raw: false }) as unknown[][])
-            .map((r) => (Array.isArray(r) ? r.map((c) => String(c ?? '')) : []))
-            .filter((r) => r.some((c) => c.trim() !== ''));
-        });
-        const withHeader = grids.filter((g) => findHeaderRow(g) >= 0);
-        const chosen = [...(withHeader.length ? withHeader : grids)].sort((a, b) => b.length - a.length)[0] ?? [];
-        applyGrid(chosen);
-      } catch {
-        setRows([]);
-        setParseError('Could not read that spreadsheet. Try re-saving it as .xlsx or .csv.');
-      }
-      return;
+    try {
+      applyGrid(await readFileToGrid(f, STUDENT_KEYS, STUDENT_ID_KEYS));
+    } catch {
+      setRows([]);
+      setParseError('Could not read that file. Try re-saving it as .xlsx or .csv.');
     }
-    const reader = new FileReader();
-    reader.onload = () => applyGrid(parseCsv(String(reader.result ?? '')));
-    reader.onerror = () => setParseError('Could not read that file.');
-    reader.readAsText(f);
   };
 
   const valid = rows.filter((r) => r.classId);
@@ -731,7 +658,7 @@ function ImportStudentsModal({ onClose, onDone }: { onClose: () => void; onDone:
             <input
               id="import-file"
               type="file"
-              accept=".csv,.xlsx,.xls,.xlsm,.xlsb,.ods,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.oasis.opendocument.spreadsheet"
+              accept={SPREADSHEET_ACCEPT}
               style={{ display: 'none' }}
               onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
             />
