@@ -5,6 +5,7 @@
  *   const students = await api.students.list();
  */
 import type {
+  AskReportDto,
   CreateAccountDto,
   CreateBatchDto,
   CreateCategoryDto,
@@ -70,6 +71,7 @@ import type {
   AcademicYear,
   AccountStatement,
   AdminOrgDetail,
+  AskAnswer,
   AdminOrgSummary,
   AdminUser,
   AttendanceMonth,
@@ -117,6 +119,10 @@ import type {
   TransportRoute,
   TransportSettings,
   Vendor,
+  ConcessionsReport,
+  FeeHeadsReport,
+  ReportsOverview,
+  TransportReport,
 } from './types';
 
 export * from './types';
@@ -532,6 +538,19 @@ export function createClient(opts: ClientOptions) {
           request<DiscountRule>('PATCH', `/setup/discounts/${id}`, dto),
         remove: (id: string) => request<void>('DELETE', `/setup/discounts/${id}`),
       },
+    },
+    /** Fees & collections reporting (the `reports` module). */
+    reports: {
+      /** Headline figures, payment-mode split, and who has settled. */
+      overview: () => request<ReportsOverview>('GET', '/reports/overview'),
+      /** Billed vs collected per fee head, with per-instalment detail. */
+      feeHeads: () => request<FeeHeadsReport>('GET', '/reports/fee-heads'),
+      /** What each concession rule took off this year. */
+      concessions: () => request<ConcessionsReport>('GET', '/reports/concessions'),
+      /** Transport collection by pickup stop. */
+      transport: () => request<TransportReport>('GET', '/reports/transport'),
+      /** Answer a plain-language question about the school's fees. */
+      ask: (dto: AskReportDto) => request<AskAnswer>('POST', '/reports/ask', dto),
     },
   };
 }

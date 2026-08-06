@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { formatMoney, paiseToRupees, rupeesToPaise, type FeePeriod, type FeeScope, type InvoiceStatus } from '@mentivax/core';
 import type { Invoice, InvoiceLine, Student } from '@mentivax/api-client';
@@ -59,7 +59,21 @@ export function InvoicesPage() {
   const classes = useAsync(() => api.classes.list(), []);
   const [cls, setCls] = useState<string | 'all'>('all');
 
-  const rows = data ?? [];
+  // Deep links from the Ask bar: /invoices?class=8+STD&status=PARTIAL&search=…
+  // The class rail already keys off the class *name*, which is what a question
+  // says, so it maps straight across. Status has no rail — it gets a chip.
+  const [statusFilter, setStatusFilter] = useState<string | null>(params.get('status'));
+  const applied = useRef(false);
+  useEffect(() => {
+    if (applied.current) return;
+    const wantClass = params.get('class');
+    const wantSearch = params.get('search');
+    if (wantClass) setCls(wantClass);
+    if (wantSearch) setSearch(wantSearch);
+    if (wantClass || wantSearch || params.get('status')) applied.current = true;
+  }, [params]);
+
+  const rows = (data ?? []).filter((i) => !statusFilter || i.status === statusFilter);
   const countByClass = useMemo(() => {
     const m: Record<string, number> = {};
     for (const i of rows) m[i.className] = (m[i.className] ?? 0) + 1;
@@ -97,6 +111,12 @@ export function InvoicesPage() {
           <span>Pending {filterActive && <span className="muted">· filtered</span>}<span className="sb-hint"> · view ›</span></span>
           <b style={{ color: 'var(--red-fig)' }}>{formatMoney(pendingTotal)}</b>
         </button>
+        {statusFilter && (
+          <button className="linkfilter" onClick={() => setStatusFilter(null)} title="Show every status again">
+            {statusFilter.toLowerCase()} only
+            <Icon name="x" size={12} />
+          </button>
+        )}
         <div className="statbar-sp" />
         <div className="search">
           <Icon name="search" />

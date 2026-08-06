@@ -717,3 +717,11 @@ export const updateDocumentTypeSchema = z.object({
   required: z.boolean().optional(),
 });
 export type UpdateDocumentTypeDto = z.infer<typeof updateDocumentTypeSchema>;
+
+// --- Reports ----------------------------------------------------------------
+
+/** A natural-language question for the Reports → Ask tab. */
+export const askReportSchema = z.object({
+  question: z.string().trim().min(3).max(300),
+});
+export type AskReportDto = z.infer<typeof askReportSchema>;

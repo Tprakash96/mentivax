@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'reac
 import { brand } from '@mentivax/ui';
 import { MODULE_MAP, PERMISSION_MAP } from '@mentivax/core';
 import { Icon } from './components/Icon';
+import { TopBar } from './components/TopBar';
 import { useApi } from './lib/api';
 import { LoginPage } from './pages/LoginPage';
 import { HomePage } from './pages/HomePage';
@@ -23,7 +24,7 @@ import { StandardsPage } from './pages/StandardsPage';
 import { MappingsPage } from './pages/MappingsPage';
 import { FinancialYearPage } from './pages/FinancialYearPage';
 import { MarketplacePage } from './pages/MarketplacePage';
-import { AskReportsPage } from './pages/AskReportsPage';
+import { ReportsPage } from './pages/ReportsPage';
 import { TeamPage } from './pages/TeamPage';
 import { RolesPage } from './pages/RolesPage';
 import { AdminOrganizationsPage } from './pages/AdminOrganizationsPage';
@@ -100,9 +101,11 @@ const CONTEXTS: ModuleContext[] = [
   {
     key: 'reports',
     code: 'RE',
-    label: 'Ask reports',
-    match: ['/ask-reports'],
-    items: [{ to: '/ask-reports', label: 'Ask reports', icon: 'sparkles' }],
+    label: 'Reports',
+    match: ['/reports'],
+    items: [
+      { to: '/reports', label: 'Fees & collections', icon: 'sparkles', module: 'reports', permission: 'reports:read' },
+    ],
   },
   {
     key: 'admin',
@@ -136,7 +139,7 @@ function contextFor(pathname: string): ModuleContext {
 }
 
 const TITLES: Record<string, { title: string; sub: string }> = {
-  '/ask-reports': { title: 'Ask Reports', sub: 'Ask questions about your school in plain language' },
+  '/reports': { title: 'Reports', sub: 'Fees & collections — where the money stands' },
   '/students': { title: 'Students', sub: 'Roster · fee status per student' },
   '/documents': { title: 'Documents', sub: 'Files collected per student' },
   '/rollover': { title: 'Year rollover', sub: 'Promote students to the next standard' },
@@ -237,23 +240,6 @@ function Denied({ permission }: { permission: string }) {
   );
 }
 
-function useTheme() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(
-    () => (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') || 'light',
-  );
-  const toggle = () => {
-    const next = theme === 'light' ? 'dark' : 'light';
-    setTheme(next);
-    document.documentElement.setAttribute('data-theme', next);
-    try {
-      localStorage.setItem('mentivax.theme', next);
-    } catch {
-      /* ignore */
-    }
-  };
-  return { theme, toggle };
-}
-
 /** Sidebar footer: which school you're in, who you are, and how to leave. */
 function OrgMenu() {
   const { currentOrg, orgs, setOrg, loading, session, logout, roleName } = useApi();
@@ -311,89 +297,10 @@ function OrgMenu() {
   );
 }
 
-/**
- * The launcher hub's top bar (the School Admin screen has no sidebar — the
- * module cards are the navigation). School identity on the left, theme + the
- * signed-in user menu on the right.
- */
-function LauncherTopBar({ theme, onToggleTheme }: { theme: 'light' | 'dark'; onToggleTheme: () => void }) {
-  const { currentOrg, orgs, setOrg, session, logout, roleName } = useApi();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [open]);
-
-  return (
-    <header className="launcher-top">
-      <div className="launcher-top-inner">
-        <div className="launcher-brand">
-          <div className="mark">{currentOrg?.shortCode ?? 'M'}</div>
-          <div>
-            <b>{currentOrg?.name ?? brand.name}</b>
-            <span>{roleName ?? 'Signed in'}</span>
-          </div>
-        </div>
-        <div className="launcher-sp" />
-        <button
-          className="themetog"
-          onClick={onToggleTheme}
-          title={theme === 'light' ? 'Switch to dark' : 'Switch to light'}
-          aria-label="Toggle theme"
-        >
-          <Icon name={theme === 'light' ? 'moon' : 'sun'} size={17} />
-        </button>
-        <div className="lt-user" ref={ref}>
-          <button className="lt-user-btn" onClick={() => setOpen((v) => !v)}>
-            <span className="lt-who">Signed in as</span>
-            <b>{session?.user.name ?? session?.user.email}</b>
-            <Icon name="chevron" size={13} />
-          </button>
-          {open && (
-            <div className="lt-menu">
-              {orgs.length > 1 && (
-                <>
-                  <div className="lt-menu-sec">Switch school</div>
-                  {orgs.map((o) => (
-                    <button
-                      key={o.id}
-                      className="lt-menu-item"
-                      onClick={() => {
-                        setOrg(o.id);
-                        setOpen(false);
-                      }}
-                    >
-                      <span className="ob sm">{o.shortCode}</span>
-                      <span>{o.name}</span>
-                    </button>
-                  ))}
-                  <div className="lt-menu-div" />
-                </>
-              )}
-              <div className="lt-menu-sec">{session?.user.email}</div>
-              <button className="lt-menu-item" onClick={() => void logout()}>
-                <Icon name="ban" size={14} />
-                <span>Sign out</span>
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </header>
-  );
-}
-
 export function App() {
   const { booting, isAuthenticated, isPlatformAdmin, hasModule, can, currentOrg } = useApi();
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { theme, toggle: toggleTheme } = useTheme();
   const meta = TITLES[pathname] ?? TITLES[`/${pathname.split('/')[1]}`] ?? { title: 'Mentivax', sub: '' };
 
   // Restoring a stored session — showing the login form here would flash it at
@@ -418,7 +325,7 @@ export function App() {
   if (pathname === '/home') {
     return (
       <div className="launcher">
-        <LauncherTopBar theme={theme} onToggleTheme={toggleTheme} />
+        <TopBar />
         <main className="launcher-main">
           <div className="launcher-wrap">
             <HomePage />
@@ -469,27 +376,24 @@ export function App() {
       </aside>
 
       <div className="main">
+        <TopBar />
         <div className="mtop">
           <div>
             <h1>{meta.title}</h1>
             <div className="sub">{meta.sub}</div>
           </div>
-          <div style={{ flex: 1 }} />
-          <button
-            className="themetog"
-            onClick={toggleTheme}
-            title={theme === 'light' ? 'Switch to dark' : 'Switch to light'}
-            aria-label="Toggle theme"
-          >
-            <Icon name={theme === 'light' ? 'moon' : 'sun'} size={17} />
-          </button>
         </div>
         <div className="body">
           <div className="wrap">
             <Routes>
               <Route path="/" element={<Navigate to={isPlatformAdmin ? '/admin/organizations' : '/home'} replace />} />
               <Route path="/home" element={<HomePage />} />
-              <Route path="/ask-reports" element={<AskReportsPage />} />
+              <Route
+                path="/reports"
+                element={<Gate module="reports" permission="reports:read"><ReportsPage /></Gate>}
+              />
+              {/* The page used to be Ask-only; keep old links working. */}
+              <Route path="/ask-reports" element={<Navigate to="/reports" replace />} />
               <Route
                 path="/students"
                 element={<Gate module="students" permission="students:read"><StudentsPage /></Gate>}

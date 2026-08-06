@@ -11,10 +11,12 @@
       rel="stylesheet"
     />
     <script>
-      // Apply the saved theme before paint to avoid a flash.
+      // The app is light-only; the theme toggle was removed. This clears any
+      // preference stored by an earlier build so nobody is stranded in dark with
+      // no control left to change it.
       try {
-        var t = localStorage.getItem('mentivax.theme') || 'light';
-        document.documentElement.setAttribute('data-theme', t);
+        document.documentElement.setAttribute('data-theme', 'light');
+        localStorage.removeItem('mentivax.theme');
       } catch (e) {}
     </script>
   </head>

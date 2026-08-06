@@ -11,6 +11,7 @@ import {
   periodMeta,
   periodBreakdown,
   academicYearMonths,
+  settleLines,
 } from './fees';
 import type { FeeStructureInput, TransportFareInput } from './types';
 
@@ -129,5 +130,59 @@ describe('status', () => {
     expect(deriveStatus(1000, 0)).toBe('PENDING');
     expect(deriveStatus(1000, 500)).toBe('PARTIAL');
     expect(deriveStatus(1000, 1000)).toBe('PAID');
+  });
+});
+
+describe('settling money across fee heads', () => {
+  // Two fee heads: a two-term school fee and a one-time books fee.
+  const lines = [
+    { id: 'school', net: 1000, periods: [600, 400] },
+    { id: 'books', net: 500, periods: [500] },
+  ];
+
+  it('leaves everything due when nothing was paid', () => {
+    const [school, books] = settleLines(lines, []);
+    expect(school).toMatchObject({ paid: 0, due: 1000, periodsPaid: [0, 0] });
+    expect(books).toMatchObject({ paid: 0, due: 500 });
+  });
+
+  it('pours a whole-invoice payment over the heads in order', () => {
+    const [school, books] = settleLines(lines, [{ lineId: null, amount: 700 }]);
+    // School fee fills first — Term 1 in full, ₹1 into Term 2.
+    expect(school).toMatchObject({ paid: 700, due: 300, periodsPaid: [600, 100] });
+    expect(books).toMatchObject({ paid: 0, due: 500 });
+  });
+
+  it('sends line-targeted money only to its own head', () => {
+    const [school, books] = settleLines(lines, [{ lineId: 'books', amount: 500 }]);
+    expect(school).toMatchObject({ paid: 0, due: 1000 });
+    expect(books).toMatchObject({ paid: 500, due: 0, periodsPaid: [500] });
+  });
+
+  it('settles targeted money first, then pools the rest into what is left', () => {
+    const [school, books] = settleLines(lines, [
+      { lineId: 'books', amount: 500 },
+      { lineId: null, amount: 800 },
+    ]);
+    // Books is already settled, so the pooled 800 all lands on the school fee.
+    expect(school).toMatchObject({ paid: 800, due: 200, periodsPaid: [600, 200] });
+    expect(books).toMatchObject({ paid: 500, due: 0 });
+  });
+
+  it('never lets an overpayment bleed past a head or the invoice', () => {
+    const [school, books] = settleLines(lines, [{ lineId: null, amount: 9999 }]);
+    expect(school).toMatchObject({ paid: 1000, due: 0, periodsPaid: [600, 400] });
+    expect(books).toMatchObject({ paid: 500, due: 0 });
+    expect(school!.paid + books!.paid).toBe(1500);
+  });
+
+  it('caps targeted overpayment at the head it targets', () => {
+    const [, books] = settleLines(lines, [{ lineId: 'books', amount: 900 }]);
+    expect(books).toMatchObject({ paid: 500, due: 0 });
+  });
+
+  it('ignores allocations pointing at a line that is not on the invoice', () => {
+    const settled = settleLines(lines, [{ lineId: 'ghost', amount: 400 }]);
+    expect(settled.every((r) => r.paid === 0)).toBe(true);
   });
 });

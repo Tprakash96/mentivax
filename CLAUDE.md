@@ -152,10 +152,119 @@ Per-app: `pnpm --filter @mentivax/api dev`, `... @mentivax/web dev`, etc.
 - `GET /students`, `GET /students/:id`, `POST /students`
 - `GET /invoices`, `GET /invoices/:id`, `POST /invoices/batch/preview`, `POST /invoices/batch`
 - `GET /payments`, `GET /payments/summary`, `POST /payments`
+- (reports routes below require the `reports` module + `reports:read`)
+- `GET /reports/overview|fee-heads|concessions|transport` — the Reports page tabs
+- `POST /reports/ask` — a plain-language question; `POST /reports/ask/plan` runs an
+  explicit plan with no model involved
 
 The class-billing wizard: `batch/preview` returns server-computed rows/totals;
 the web review grid adds per-student discounts; `batch` persists an invoice per
 student.
+
+## Ask (natural-language questions)
+
+The Ask bar on the home page answers questions about the school's own data. It is
+open-ended: a question can be about anything in the schema, not a fixed list of
+reports. Three tiers, tried in order.
+
+### Tier 1 — the model writes SQL, the database keeps it honest
+
+Gemini is given the real schema (`ask-schema.ts`, generated from Prisma's DMMF so
+it cannot drift) and writes **one SELECT**. That SQL is not trusted. It runs as
+`mentivax_ask`, created by the `ask_row_level_security` migration:
+
+- The role holds `SELECT` and nothing else, on the tenant tables only.
+- Every one of those tables has a row-level policy filtering on `app.org_id`, so a
+  query with **no `organizationId` predicate at all** returns only the caller's
+  rows, and one naming another school returns nothing.
+- `User` and `RefreshToken` are denied outright — credentials are never readable.
+- Scope is set with `SET LOCAL`, never `set_config`. This matters: `set_config` is
+  callable from inside a SELECT and could re-point `app.org_id` mid-scan (it did,
+  when tested), so `ask_block_scope_switching` revokes it from PUBLIC.
+- A **new table is unreadable until explicitly granted** — the safe default. Add a
+  policy + `GRANT SELECT` when a new module should be askable.
+
+The app's own role owns the tables and is superuser, so RLS does not apply to it:
+normal queries are unaffected, and policies are deliberately **not** `FORCE`d.
+`AskSqlService` adds containment only — read-only transaction, statement timeout,
+row cap, single-statement check. **If that guard were deleted the database would
+still hold the line**; that is the property worth preserving. See
+`ask-sql.service.test.ts`, which asserts it against two real schools.
+
+A valid query can still answer a subtly different question, so every AI-written
+statement is written to the server log alongside the question that produced it.
+It is **not** returned to the browser: it names tables and internal ids, and a
+school administrator cannot act on it. Callers get `source: 'ai-sql' | 'reader'`
+instead, which says which route answered without disclosing anything.
+
+Practicalities learned the hard way:
+
+- **Model chain, not one model.** Gemini's free tier is metered *per model* in
+  tens of requests a day, so `GeminiService` walks `DEFAULT_MODELS` and moves on
+  when one is rate-limited, remembering it for 15 minutes. Verified against a real
+  key: the 2.0-flash family reports a free-tier limit of **zero**, 2.5-flash is
+  retired for new keys, and `gemini-3.6-flash` allows ~20.
+- **Non-thinking models only.** Writing a SELECT from a schema needs no
+  deliberation: the lite models answer in ~1.1–1.4s where `gemini-3.5-flash`
+  took 10s and `gemini-3-flash-preview` 15s.
+- **Never ask the model to convert units.** Money is formatted to rupees *before*
+  it reaches the phrasing call, because asked to divide paise itself it reported
+  ₹12,000 as "₹12,00,000".
+- **A count is never money.** `looksLikeCount` vetoes both the model's own
+  `moneyColumns` declaration and the name heuristic — a `COUNT(*)` aliased
+  "Fee-exempt students" was rendered "₹0".
+- **One self-repair attempt.** When Postgres rejects the SQL, the error is fed
+  back to the model once. The usual cause is a guessed column, which is why
+  `ask-schema.ts` spells out the join paths (an invoice reaches its class only
+  through Student).
+
+### Tier 2 — the catalog, when there is no model
+
+Older, narrower path kept because it needs no AI. Details below.
+
+1. **Plan** — Gemini reads the catalog in `packages/core/src/ask.ts` (`ASK_DATASETS`)
+   and returns a *plan*: dataset, filters, groupBy, sort. Field keys are a
+   contract — never rename one, add instead.
+2. **Validate & run** — `validateAskPlan` drops anything the catalog didn't
+   offer (unknown field, disallowed operator, enum value outside the set), then
+   `AskQueryService` compiles it to Prisma with `organizationId` +
+   `academicYearId` written by the server. **Scope is not expressible in a plan**,
+   which is why a crafted question can only ask a *different allowed question*.
+3. **Phrase** — Gemini turns the rows the server fetched into prose.
+
+Consequences worth knowing:
+
+- With no Gemini key (or no quota), `readQuestion` (`packages/core/src/ask-nl.ts`)
+  reads the question itself and runs the **same validated query**. It works
+  *compositionally* — every word is normalised to a concept (forgiving spelling
+  via capped edit distance, then unambiguous prefixes), and the plan is assembled
+  from whichever concepts turned up. So word order doesn't matter and
+  "pendng dues in 8std" lands on the same plan as "8 STD pending fees". Extend it
+  by adding synonyms to `VOCAB`, not by adding sentence patterns.
+  - A word in `STOPWORDS` is never *inferred* from, only matched exactly —
+    otherwise "how" becomes "how much" and "fee" becomes "fee head".
+  - Naming a record type wins over inferring one: "students yet to pay" is a
+    question about students, not receipts, even though it contains "pay".
+  - Below ~0.34 confidence the question is declined rather than answered, and the
+    reading is always shown back to the user (`reading`, `corrections`) so a
+    misread question is visible instead of silently trusted.
+- Answers carry **page links**: each dataset declares a `route`, and any filter
+  with a `param` becomes a query string (`/students?class=8+STD&due=owing`).
+  When you add a param, teach the target page to read it *and* show a
+  `.linkfilter` chip — a silently filtered list is worse than no filter.
+- `POST /reports/ask/plan` runs an explicit plan with no model, which is how to
+  test the engine and how to reproduce any answer from its `trace`.
+- **Infrastructure detail never reaches the browser.** A missing API key, an
+  exhausted quota, a model name — all of that goes to `Logger.warn`
+  (`OPERATOR_DIAGNOSIS` in `ask.service.ts`); the user gets a neutral note. A
+  school accountant cannot act on "the key has no quota", and shipping it leaks
+  how the server is configured. Same on the client: log the exception, render a
+  plain message.
+- **An answer states its own scope.** `describe()` renders the filters in words
+  ("No receipts in July 2026", not "nothing matches") — an empty result that
+  doesn't name what it searched reads as a broken feature. When a question isn't
+  understood, `understood: false` says so and offers examples instead of passing
+  off unrelated totals as the answer.
 
 ## Gotchas
 
@@ -164,3 +273,12 @@ student.
 - `noUncheckedIndexedAccess` is on — array/record access is `T | undefined`.
 - Desktop loads `apps/web/dist` in production, so build web before packaging.
 - Mobile (Expo) on a physical device needs the API's LAN IP, not `localhost`.
+- **After adding an export to `api-client` or `core`, restart the web dev server
+  with `--force`** (or delete `apps/web/node_modules/.vite`). Vite pre-bundles the
+  workspace packages (`optimizeDeps.include`) and does *not* reliably invalidate
+  that cache for symlinked deps, so a long-running dev server keeps serving the
+  old bundle — the new method shows up as `undefined` at runtime while
+  `pnpm typecheck` passes.
+- `apps/web/vite.config.ts` loads env from the **repo root**, so the single root
+  `.env` drives the API and the clients. `WEB_PORT` pins the dev-server port
+  (with `strictPort`) for machines where something else owns 5173.

@@ -24,6 +24,7 @@ import { FinancialYearsModule } from './financial-years/financial-years.module';
 import { ExpensesModule } from './expenses/expenses.module';
 import { StaffModule } from './staff/staff.module';
 import { SetupModule } from './setup/setup.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { SetupModule } from './setup/setup.module';
     ExpensesModule,
     StaffModule,
     SetupModule,
+    ReportsModule,
   ],
   controllers: [HealthController],
   providers: [

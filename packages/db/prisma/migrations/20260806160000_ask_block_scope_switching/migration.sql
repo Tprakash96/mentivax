@@ -1,0 +1,18 @@
+-- Close the one hole in Ask's row-level security: `set_config`.
+--
+-- The tenant policies read `app.org_id`, and `set_config('app.org_id', …, true)`
+-- can change it *inside a single SELECT*. Verified against a second school:
+--
+--   SELECT count(*) FROM "Student"
+--   WHERE (SELECT set_config('app.org_id','<other school>',true)) IS NOT NULL;
+--
+-- returned the other school's rows. A statement-level policy cannot help, because
+-- by the time the scan runs the setting has legitimately changed.
+--
+-- `set_config` is executable by PUBLIC out of the box. Nothing in this
+-- application calls it — the API sets the scope with `SET LOCAL`, which is a
+-- command rather than a function and needs no EXECUTE privilege — so it is
+-- revoked wholesale. `current_setting` is deliberately left alone: the policies
+-- themselves depend on it, and reading your own organization id gives away
+-- nothing.
+REVOKE EXECUTE ON FUNCTION set_config(text, text, boolean) FROM PUBLIC;

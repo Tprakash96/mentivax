@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { formatMoney, paiseToRupees, rupeesToPaise, type FeePeriod, type PaymentMode } from '@mentivax/core';
 import type { Invoice, MentivaxClient, Payment, Student } from '@mentivax/api-client';
 import { Icon } from '../components/Icon';
@@ -177,6 +177,7 @@ function allocateTopDown(dues: Due[], amountPaise: number, excluded: Set<string>
 export function PaymentsPage() {
   const { api, can } = useApi();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const toast = useToast();
   const [voidingId, setVoidingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -187,9 +188,21 @@ export function PaymentsPage() {
   const [viewing, setViewing] = useState<Payment | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  // Deep links from the Ask bar: /payments?mode=UPI&search=Sara. Applied once,
+  // and shown as a chip that clears it, so the list never lies about its scope.
+  const [modeFilter, setModeFilter] = useState<string | null>(params.get('mode'));
+  const applied = useRef(false);
+  useEffect(() => {
+    if (applied.current) return;
+    const wantSearch = params.get('search');
+    if (wantSearch) setSearch(wantSearch);
+    if (wantSearch || params.get('mode')) applied.current = true;
+  }, [params]);
+
   const summary = useAsync(() => api.payments.summary(), []);
   const payments = useAsync(() => api.payments.list({ search }), [search]);
-  const pager = usePager(payments.data ?? []);
+  const rows = modeFilter ? (payments.data ?? []).filter((p) => p.mode === modeFilter) : payments.data ?? [];
+  const pager = usePager(rows);
 
   const s = summary.data;
   const collectedPct = s && s.totalInvoiced > 0 ? Math.round((s.collected / s.totalInvoiced) * 100) : 0;
@@ -265,6 +278,12 @@ export function PaymentsPage() {
 
       <div className="tbar">
         <h4 className="section">Transaction history</h4>
+        {modeFilter && (
+          <button className="linkfilter" onClick={() => setModeFilter(null)} title="Show every mode again">
+            {MODE_LABEL[modeFilter as PaymentMode] ?? modeFilter} only
+            <Icon name="x" size={12} />
+          </button>
+        )}
         <div className="sp" />
         <div className="search">
           <Icon name="search" />

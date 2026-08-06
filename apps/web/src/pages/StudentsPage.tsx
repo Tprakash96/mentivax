@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { formatMoney, type DiscountType, type TransportShift } from '@mentivax/core';
 import type { Invoice, Student, SchoolClass } from '@mentivax/api-client';
 import { Icon } from '../components/Icon';
@@ -35,6 +35,7 @@ const PROFILE_DOCS = ['Aadhaar', 'Birth certificate', 'Transfer certificate', 'C
 export function StudentsPage() {
   const { api } = useApi();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const toast = useToast();
   const [filter, setFilter] = useState('ACTIVE');
   const [search, setSearch] = useState('');
@@ -51,6 +52,26 @@ export function StudentsPage() {
     if (classId === null && classes.data?.[0]) setClassId(classes.data[0].id);
   }, [classes.data, classId]);
 
+  // Deep links from the Ask bar: /students?class=8+STD&status=ACTIVE&due=owing.
+  // Applied once, and surfaced as a chip the reader can clear — a silently
+  // filtered roster is worse than no filter at all.
+  const [dueOnly, setDueOnly] = useState(params.get('due') === 'owing');
+  const applied = useRef(false);
+  useEffect(() => {
+    if (applied.current || !classes.data) return;
+    const wantClass = params.get('class');
+    const wantStatus = params.get('status');
+    const wantSearch = params.get('search');
+    if (wantClass) {
+      // Links carry the class *name* (what a question says); resolve to its id.
+      const match = classes.data.find((c) => c.name.toLowerCase() === wantClass.toLowerCase());
+      setClassId(match ? match.id : 'all');
+    }
+    if (wantStatus) setFilter(wantStatus);
+    if (wantSearch) setSearch(wantSearch);
+    if (wantClass || wantStatus || wantSearch || params.get('due')) applied.current = true;
+  }, [classes.data, params]);
+
   const { data, loading, error, reload } = useAsync(
     () =>
       api.students.list({
@@ -62,7 +83,8 @@ export function StudentsPage() {
       }),
     [classId, filter, search],
   );
-  const pager = usePager(data ?? []);
+  const rows = dueOnly ? (data ?? []).filter((s) => s.pending > 0) : (data ?? []);
+  const pager = usePager(rows);
   const classList = classes.data ?? [];
   const totalStudents = classList.reduce((n, c) => n + (c.studentCount ?? 0), 0);
 
@@ -128,6 +150,12 @@ export function StudentsPage() {
             </button>
           ))}
         </div>
+        {dueOnly && (
+          <button className="linkfilter" onClick={() => setDueOnly(false)} title="Show everyone again">
+            Only students who owe
+            <Icon name="x" size={12} />
+          </button>
+        )}
         <div className="sp" />
         <button className="btn" onClick={() => setImportOpen(true)}>
           <Icon name="import" size={15} />

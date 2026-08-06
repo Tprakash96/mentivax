@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { formatMoney } from '@mentivax/core';
+import { AskBar, type AskGlance } from '../components/AskBar';
 import { useApi } from '../lib/api';
 import { useAsync } from '../lib/useAsync';
 
@@ -63,13 +64,13 @@ const RUN: Launch[] = [
   {
     id: 'reports',
     icon: 'RE',
-    title: 'Ask reports',
-    to: '/ask-reports',
-    read: '',
-    write: '',
-    metric: '—',
-    metricLabel: 'ask in plain language',
-    chips: ['Fees', 'Students', 'Collections'],
+    title: 'Reports',
+    to: '/reports',
+    module: 'reports',
+    read: 'reports:read',
+    write: 'reports:read',
+    metricLabel: 'collection rate',
+    chips: ['Overview', 'Fee heads', 'Concessions'],
   },
 ];
 
@@ -154,6 +155,8 @@ export function HomePage() {
       return { value: formatMoney(cashInHand), label: 'cash in hand' };
     if (l.id === 'staff' && staffCount != null)
       return { value: String(staffCount), label: 'on the rolls' };
+    if (l.id === 'reports' && s && s.totalInvoiced > 0)
+      return { value: `${Math.round((s.collected / s.totalInvoiced) * 100)}%`, label: 'collection rate' };
     if (l.id === 'setup' && setup.data)
       return { value: `${setup.data.doneMusts}/${setup.data.totalMusts}`, label: 'essentials done' };
     if (l.metric) return { value: l.metric, label: l.metricLabel ?? '' };
@@ -196,15 +199,14 @@ export function HomePage() {
   const configure = CONFIGURE.filter(allowed);
   const openCount = run.length + configure.length;
 
-  // "Needs attention" — derived from real figures, shown only when there's work.
-  const glance: { key: string; value: string; label: string; cta: string; to: string; tone: string }[] = [];
+  // The figures the old "needs attention" band carried, now shown beside Ask.
+  const glance: AskGlance[] = [];
   if (s && can('payments:read')) {
     if (s.balanceDue > 0)
       glance.push({
         key: 'due',
         value: formatMoney(s.balanceDue),
-        label: 'in fees still to be collected',
-        cta: 'Collect →',
+        label: 'still to collect',
         to: '/payments',
         tone: '#ffc24b',
       });
@@ -212,12 +214,14 @@ export function HomePage() {
       glance.push({
         key: 'inv',
         value: String(s.invoiceCount),
-        label: 'invoices issued this year',
-        cta: 'Open →',
+        label: 'invoices this year',
         to: '/invoices',
         tone: '#93b4ff',
       });
   }
+
+  // Ask needs the reports module and read access — same gate as the page.
+  const canAsk = hasModule('reports') && can('reports:read');
 
   const quick = [
     { label: 'Collect a fee', to: '/payments', primary: true, show: can('payments:write') && hasModule('fees') },
@@ -254,26 +258,10 @@ export function HomePage() {
         )}
       </div>
 
-      {glance.length > 0 && (
-        <div className="attn">
-          <div className="attn-label">
-            <span>Needs</span>
-            <span>attention</span>
-          </div>
-          {glance.map((g) => (
-            <button key={g.key} className="attn-item" onClick={() => navigate(g.to)}>
-              <span className="attn-top">
-                <span className="attn-dot" style={{ background: g.tone }} />
-                <span className="attn-val" style={{ color: g.tone }}>
-                  {g.value}
-                </span>
-              </span>
-              <span className="attn-cap">{g.label}</span>
-              <span className="attn-cta">{g.cta}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Ask replaces the old "needs attention" band — same figures, still one
+          click away, but you can now put a question to the data instead of
+          reading whichever two numbers we chose to show. */}
+      {canAsk && <AskBar glance={glance} />}
 
       {run.length > 0 && (
         <div className="lgroup">

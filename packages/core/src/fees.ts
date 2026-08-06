@@ -247,3 +247,100 @@ export function deriveStatus(net: number, paid: number): 'PENDING' | 'PARTIAL' |
   if (paid >= net) return 'PAID';
   return 'PARTIAL';
 }
+
+// ---------------------------------------------------------------------------
+// Settlement — turning invoice-level money received into per-fee-head figures
+// ---------------------------------------------------------------------------
+
+/** One fee line of an issued invoice, as far as settlement cares. */
+export interface SettleLine {
+  id: string;
+  /** Net payable for the line (paise) — what settlement fills up to. */
+  net: number;
+  /** Per-period split (paise). Single-element for one-time fees. */
+  periods: number[];
+}
+
+/** A slice of a payment applied to an invoice, optionally to one fee line. */
+export interface SettleAllocation {
+  /** The fee line this slice targets, or null/undefined for whole-invoice. */
+  lineId?: string | null;
+  amount: number;
+}
+
+/** What settlement concluded for one fee line (all figures paise). */
+export interface SettledLine {
+  id: string;
+  net: number;
+  paid: number;
+  /** Outstanding for the line — never negative. */
+  due: number;
+  /** Paid against each period, index-aligned with the line's `periods`. */
+  periodsPaid: number[];
+}
+
+/**
+ * Split the money received on an invoice across its fee lines and their periods.
+ *
+ * Two kinds of allocation exist, and they settle in this order:
+ *
+ *  1. **Line-targeted** (`lineId` set) — money the counter deliberately applied
+ *     to one fee head. It only ever settles that line.
+ *  2. **Whole-invoice** (`lineId` null) — pooled and poured over the lines in
+ *     the order given, oldest fee head first, filling each line's remaining
+ *     outstanding. Within a line it fills periods in order, so Term 1 settles
+ *     before Term 2.
+ *
+ * Overpayment never bleeds past a line's `net`, so per-line figures always sum
+ * to at most the invoice net. This is the read-side mirror of how
+ * `PaymentsService.breakdown` narrates a single receipt.
+ */
+export function settleLines(lines: SettleLine[], allocations: SettleAllocation[]): SettledLine[] {
+  const out: SettledLine[] = lines.map((l) => ({
+    id: l.id,
+    net: l.net,
+    paid: 0,
+    due: l.net,
+    periodsPaid: l.periods.map(() => 0),
+  }));
+  const byId = new Map(out.map((r, i) => [r.id, i]));
+
+  // Pass 1 — line-targeted money settles its own line only.
+  for (const a of allocations) {
+    if (!a.lineId || a.amount <= 0) continue;
+    const i = byId.get(a.lineId);
+    if (i === undefined) continue;
+    const row = out[i];
+    if (!row) continue;
+    row.paid = Math.min(row.net, row.paid + a.amount);
+  }
+
+  // Pass 2 — whole-invoice money fills whatever outstanding remains, in order.
+  let pool = 0;
+  for (const a of allocations) {
+    if (!a.lineId && a.amount > 0) pool += a.amount;
+  }
+  for (const row of out) {
+    if (pool <= 0) break;
+    const take = Math.min(pool, Math.max(0, row.net - row.paid));
+    row.paid += take;
+    pool -= take;
+  }
+
+  // Spread each line's settled total across its periods, earliest first.
+  for (let i = 0; i < out.length; i += 1) {
+    const row = out[i];
+    const src = lines[i];
+    if (!row || !src) continue;
+    row.due = Math.max(0, row.net - row.paid);
+    let left = row.paid;
+    for (let p = 0; p < src.periods.length; p += 1) {
+      const slot = src.periods[p] ?? 0;
+      const take = Math.min(slot, Math.max(0, left));
+      row.periodsPaid[p] = take;
+      left -= take;
+    }
+  }
+
+  return out;
+}

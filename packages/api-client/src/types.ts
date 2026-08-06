@@ -751,3 +751,191 @@ export interface DocumentType {
   required: boolean;
   rank: number;
 }
+
+// --- Reports (fees & collections) ------------------------------------------
+
+/** One payment mode's share of the money received. */
+export interface ReportModeSlice {
+  key: string;
+  label: string;
+  amount: number;
+}
+
+/**
+ * The Overview tab. Every money figure is paise and covers *live* invoices —
+ * drafts and cancelled invoices are excluded, so `collected`/`invoiced` agree
+ * with the Payments summary. Student counts roll a student's invoices together.
+ */
+export interface ReportsOverview {
+  /** The active academic year these figures cover, e.g. "2026-27". */
+  academicYear: string;
+  invoiced: number;
+  collected: number;
+  pending: number;
+  concession: number;
+  /** Collected as a whole-number percentage of invoiced. */
+  collectionRate: number;
+  liveInvoices: number;
+  pendingStudents: number;
+  concessionStudents: number;
+  receiptCount: number;
+  averageReceipt: number;
+  fullyPaidStudents: number;
+  partPaidStudents: number;
+  unpaidStudents: number;
+  modes: ReportModeSlice[];
+}
+
+/** One period (Term 1, Aug 2026, …) of a multi-period fee head. */
+export interface FeeHeadPeriod {
+  index: number;
+  label: string;
+  billed: number;
+  paid: number;
+  /** Paid as a whole-number percentage of billed. */
+  rate: number;
+  full: number;
+  part: number;
+  none: number;
+}
+
+/** How one fee head is collecting across the school. */
+export interface FeeHeadRow {
+  key: string;
+  name: string;
+  /** Marker colour, stable per head. */
+  dot: string;
+  period: FeePeriod;
+  billed: number;
+  paid: number;
+  due: number;
+  rate: number;
+  /** Students billed this head. */
+  students: number;
+  full: number;
+  part: number;
+  none: number;
+  /** Empty for one-time fees; one row per instalment otherwise. */
+  periods: FeeHeadPeriod[];
+}
+
+export interface FeeHeadsReport {
+  rows: FeeHeadRow[];
+}
+
+/** A concession rule and what it actually took off this year. */
+export interface ConcessionRow {
+  id: string;
+  label: string;
+  kind: DiscountType;
+  /** PERCENT: basis points (1000 = 10%); FLAT: paise. */
+  value: number;
+  /** Fee key it applies to, or "" for the whole invoice. */
+  appliesTo: string;
+  amount: number;
+  students: number;
+}
+
+export interface ConcessionsReport {
+  rows: ConcessionRow[];
+  total: number;
+  students: number;
+  grossBeforeConcession: number;
+  netAsked: number;
+  liveInvoices: number;
+}
+
+/** Transport collection for one pickup stop. */
+export interface TransportReportRow {
+  id: string;
+  name: string;
+  route: string;
+  riders: number;
+  billed: number;
+  collected: number;
+}
+
+export interface TransportReport {
+  rows: TransportReportRow[];
+  billedRiders: number;
+  assignedRiders: number;
+  /** Stops with no billed rider yet. */
+  quietStops: number;
+}
+
+/** One figure alongside an Ask answer. */
+export interface AskStat {
+  label: string;
+  value: string;
+  sub: string;
+}
+
+/** A place in the app an answer can send you, with the filters pre-applied. */
+export interface AskLink {
+  label: string;
+  /** App path including any query string, e.g. "/students?class=8+STD&due=owing". */
+  to: string;
+}
+
+/** The table of records or groups an answer was computed from. */
+export interface AskTable {
+  columns: { key: string; label: string; money: boolean }[];
+  rows: Record<string, string | number>[];
+  /** Totals across everything matched, not just the rows shown. */
+  totals: Record<string, number>;
+  matched: number;
+  truncated: boolean;
+}
+
+/** What the server actually queried, so an answer can be audited. */
+export interface AskQueryTrace {
+  dataset: string;
+  mode: 'rows' | 'summary';
+  groupBy?: string;
+  filters: { field: string; op: string; value: string | number | boolean }[];
+  /** Parts of the model's plan the catalog refused, if any. */
+  ignored: string[];
+}
+
+/** The answer to a natural-language question about the school's data. */
+export interface AskAnswer {
+  question: string;
+  answer: string;
+  stats: AskStat[];
+  /** Present when the question resolved to a real query. */
+  table?: AskTable;
+  /** Where to go next — dataset page plus any relevant actions. */
+  links: AskLink[];
+  /** What was queried; useful for "why did it say that". */
+  trace?: AskQueryTrace;
+  /**
+   * False when no Gemini key is configured or reachable. The figures are still
+   * real either way — only the phrasing and the range of answerable questions
+   * differ. See `note` for why.
+   */
+  ai: boolean;
+  /** A short, non-technical footnote. Never carries server or config detail. */
+  note?: string;
+  /**
+   * False when the question could not be turned into a query. The stats then
+   * carry general context, *not* an answer — render it as such.
+   */
+  understood?: boolean;
+  /**
+   * How the question was read, in plain words ("students in 8 STD, still
+   * owing"). Shown so a wrong reading is obvious and can be rephrased, rather
+   * than the user trusting an answer to a question they didn't ask.
+   */
+  reading?: string;
+  /** Words auto-corrected on the way in: `[typed, readAs]`. */
+  corrections?: [string, string][];
+  /**
+   * Which route produced the answer. Non-sensitive, unlike the query itself:
+   * useful for support ("was this the AI or the reader?") and for tests.
+   *
+   * The SQL behind an AI answer is deliberately **not** returned. It names tables
+   * and internal ids, and a school administrator cannot act on it — it belongs in
+   * the server log, where support can find it, not in the browser.
+   */
+  source?: 'ai-sql' | 'reader';
+}

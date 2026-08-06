@@ -2990,86 +2990,334 @@ h4.section {
   font-weight: 700;
 }
 
-/* ===== Ask Reports — hero ask bar ===== */
-.ask-row {
-  display: flex;
-  align-items: stretch;
-  gap: 12px;
-  margin: 4px 0 20px;
+/* ===========================================================================
+   Reports — fees & collections (Overview / Fee heads / Concessions / Ask)
+   =========================================================================== */
+
+.rep-head {
+  align-items: center;
+  margin-bottom: 14px;
 }
-.ask-bar {
+/* Tables inside a report card need to claim the full width — otherwise the
+   columns bunch up on the left and the figures collide. */
+.rep-card table {
+  width: 100%;
+}
+.rep-card table td,
+.rep-card table th {
+  padding: 9px 10px;
+}
+.rep-card table th:first-child,
+.rep-card table td:first-child {
+  padding-left: 0;
+}
+.rep-meta {
+  font-size: 13px;
+  color: var(--ink-4);
+}
+/* A quiet qualifier next to a card heading, e.g. "all receipts". */
+.rep-note {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-4);
+  margin-left: 6px;
+}
+.rep-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+.rep-facts > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.rep-facts span {
   flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.rep-facts b {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-deep);
+  white-space: nowrap;
+}
+/* Mode bars reuse the receipt-chip hues so a colour means one thing app-wide. */
+.mode-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+.mode-fill.mode-cash { background: #8a5a00; }
+.mode-fill.mode-upi { background: var(--success); }
+.mode-fill.mode-card { background: var(--green); }
+.mode-fill.mode-bank_transfer { background: var(--ink-4); }
+.mode-fill.mode-cheque { background: var(--ink-4); }
+
+/* --- one fee head ------------------------------------------------------- */
+.fh {
+  border-bottom: 1px solid var(--line-row);
+  padding: 4px 0 10px;
+}
+.fh:last-child {
+  border-bottom: none;
+}
+.fh-top {
   display: flex;
   align-items: center;
-  gap: 13px;
-  height: 58px;
-  padding: 0 20px;
-  border-radius: var(--r-lg);
-  background: linear-gradient(180deg, var(--green-soft) 0%, var(--card) 100%);
-  border: 1px solid var(--green);
-  box-shadow:
-    0 1px 2px rgba(16, 24, 20, 0.04),
-    0 10px 30px -16px rgba(37, 99, 235, 0.35);
-  transition:
-    border-color 0.16s ease,
-    box-shadow 0.16s ease;
+  gap: 12px;
+  padding: 8px 0 6px;
 }
-.ask-bar:focus-within {
-  border-color: var(--green);
-  box-shadow:
-    0 0 0 4px var(--green-soft),
-    0 14px 34px -14px rgba(37, 99, 235, 0.4);
-}
-.ask-bar .ico {
-  width: 21px;
-  height: 21px;
-  color: var(--green);
-  flex: none;
-}
-.ask-bar input {
-  border: none;
-  outline: none;
-  background: none;
+.fh-id {
   flex: 1;
-  font-size: 15.5px;
+  min-width: 0;
+}
+.fh-name {
+  font-size: 13px;
+  font-weight: 600;
   color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.ask-bar input::placeholder {
-  color: var(--ink-2);
-  font-weight: 500;
+.fh-sub {
+  font-size: 11px;
+  color: var(--ink-4);
 }
-.ask-btn {
+.fh-figs {
+  text-align: right;
+  flex: 0 0 auto;
+}
+.fh-in {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-deep);
+  white-space: nowrap;
+}
+.fh-due {
+  font-size: 11px;
+  color: var(--red-fig);
+  white-space: nowrap;
+}
+.fh-due.settled {
+  color: var(--success-ink);
+}
+.fh-payers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 20px;
+}
+.fh-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 7px;
+  white-space: nowrap;
+}
+.fh-chip.full { color: var(--success-deep); background: var(--success-soft); }
+.fh-chip.part { color: var(--amber); background: var(--amber-soft); }
+.fh-chip.none { color: var(--red); background: var(--red-soft); }
+/* A count of zero stays on the row for comparison, but greys out. */
+.fh-chip.off {
+  color: var(--ink-5);
+  background: var(--paper);
+}
+
+/* --- per-instalment detail ---------------------------------------------- */
+.fh-periods {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px 0 2px 20px;
+}
+.fh-prow {
+  display: grid;
+  grid-template-columns: minmax(70px, 0.9fr) minmax(40px, 1.4fr) 44px max-content;
+  gap: 10px;
+  align-items: center;
+}
+.fh-plabel {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fh-prate {
+  font-size: 11px;
+  text-align: right;
+  color: var(--red-fig);
+}
+.fh-prate.good {
+  color: var(--success-ink);
+}
+.fh-pval {
+  font-size: 11.5px;
+  text-align: right;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.fh-ppayers {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 10.5px;
+  color: var(--ink-4);
+  margin-top: 4px;
+}
+.fh-ppayers span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.fh-ppayers i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+/* --- Ask panel (the one rich surface on the page) ----------------------- */
+.ask-panel {
+  background: var(--navy, #0f1b34);
+  border-radius: var(--r-lg);
+  padding: 24px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: #fff;
+}
+.ask-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ask-head b {
+  font-size: 15.5px;
+  font-weight: 700;
+}
+.ask-head span {
+  font-size: 12.5px;
+  color: #9fb0d0;
+}
+.ask-input {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ask-input input {
+  flex: 1 1 320px;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 14.5px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  outline: none;
+}
+.ask-input input::placeholder {
+  color: #8296b8;
+}
+.ask-input input:focus {
+  border-color: #4f82ff;
+  background: rgba(255, 255, 255, 0.12);
+}
+.ask-input button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 58px;
-  padding: 0 26px;
-  border-radius: var(--r-lg);
+  padding: 14px 20px;
   background: var(--green);
   color: #fff;
-  font-size: 14.5px;
-  font-weight: 650;
-  letter-spacing: 0.1px;
-  box-shadow: 0 8px 20px -10px rgba(37, 99, 235, 0.55);
-  transition:
-    background 0.16s ease,
-    transform 0.06s ease;
+  border: none;
+  border-radius: 13px;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
 }
-.ask-btn:hover {
+.ask-input button:hover:not(:disabled) {
   background: var(--green-ink);
 }
-.ask-btn:active {
-  transform: translateY(1px);
+.ask-input button:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
-/* Suggested-prompt chips keep their natural sentence case, not uppercase. */
-.ask-ex {
-  text-transform: none;
-  letter-spacing: normal;
+.ask-chips {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.ask-chips button {
+  padding: 8px 13px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  font-size: 12px;
+  color: #d6dff0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ask-chips button:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+.ask-body {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 18px 20px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+}
+.ask-answer {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #f2f5fa;
+}
+.ask-idle,
+.ask-foot {
+  font-size: 12px;
+  color: #8296b8;
+}
+.ask-err {
   font-size: 13px;
+  color: #ffc9c9;
 }
-.ask-btn .ico {
-  width: 17px;
-  height: 17px;
+.ask-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.ask-stats > div {
+  min-width: 0;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 11px;
+}
+.ask-stats b {
+  display: block;
+  font-size: 18px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ask-stat-l {
+  display: block;
+  font-size: 11px;
+  color: #9fb0d0;
+}
+.ask-stat-s {
+  display: block;
+  font-size: 11px;
+  color: #8296b8;
 }
 
 @media (max-width: 900px) {
@@ -3085,11 +3333,16 @@ h4.section {
   .footbar {
     flex-wrap: wrap;
   }
-  .ask-row {
-    flex-direction: column;
+  /* Reports: stack the two Overview cards, and let a period row wrap rather
+     than squeeze the label and the money into unreadable columns. */
+  .rep-grid {
+    grid-template-columns: 1fr;
   }
-  .ask-btn {
-    justify-content: center;
+  .fh-prow {
+    grid-template-columns: minmax(60px, 1fr) 40px max-content;
+  }
+  .fh-prow .rep-bar {
+    display: none;
   }
 }
 
@@ -3510,70 +3763,478 @@ h4.section {
   background: var(--green-ink);
 }
 
-/* Needs-attention navy band */
-.attn {
+/* ===========================================================================
+   Top bar — sticky across every screen: ask anything, and your account.
+   Matches the handoff header (translucent, blurred, one hairline rule).
+   =========================================================================== */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: color-mix(in srgb, var(--canvas) 86%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+/* The bar spans its shell, but its contents line up with the page below —
+   otherwise the ask box floats out at the far left while the heading starts
+   tens of pixels in. The two shells put their content in different places, so
+   each gets its own rule.
+   App shell: match `.mtop`'s gutter, which is what sits directly underneath. */
+.topbar-row {
   display: flex;
-  align-items: stretch;
-  flex-wrap: wrap;
-  background: var(--navy-band);
-  border-radius: var(--r-modal);
+  align-items: center;
+  gap: 16px;
+  padding: 12px 30px;
+  width: 100%;
+}
+/* Launcher: the content is a centred 1240px column, so the bar follows it. */
+.launcher .topbar-row {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 12px 28px;
+}
+.launcher .topbar-panel {
+  left: max(28px, calc(50% - 592px));
+  right: max(28px, calc(50% - 592px));
+}
+.topbar-sp {
+  flex: 1;
+}
+/* Looks like the design's search field, but it is a real input: Ask is one
+   keystroke away rather than behind a dialog. */
+.topbar-ask {
+  flex: 1;
+  max-width: 620px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  box-shadow: var(--sh);
+  transition: border-color 0.14s, box-shadow 0.14s;
+}
+.topbar-ask:hover {
+  border-color: var(--green-line);
+}
+.topbar-ask:focus-within {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green-soft);
+}
+.topbar-ask .ico {
+  color: var(--green);
+  flex: none;
+}
+.topbar-ask input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  font-family: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.topbar-ask input::placeholder {
+  color: var(--ink-5);
+}
+.topbar-kbd {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-5);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  padding: 3px 7px;
+  border-radius: 6px;
+  flex: none;
+}
+.topbar-busy {
+  font-size: 11.5px;
+  color: var(--green-ink);
+  flex: none;
+}
+.topbar-right {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.topbar-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: none;
+  /* The accent, not --navy: that token inverts with the theme, which left white
+     initials on a near-white tile in dark mode. */
+  background: var(--green);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  flex: none;
+}
+.topbar-avatar:hover {
+  background: var(--green-ink);
+}
+.topbar-right .lt-menu {
+  top: calc(100% + 8px);
+  right: 0;
+}
+/* The answer sits over the page, so asking never loses your place. */
+.topbar-panel {
+  position: absolute;
+  left: 30px;
+  right: 30px;
+  max-width: 980px;
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+  padding: 4px 0;
+  box-shadow: 0 24px 60px -20px rgba(9, 18, 40, 0.55);
+}
+.topbar-panel .askbar-answer {
+  margin: 12px 16px;
+}
+
+@media (max-width: 780px) {
+  .topbar-row {
+    padding: 10px 16px;
+  }
+  .topbar-kbd {
+    display: none;
+  }
+  .topbar-panel {
+    left: 8px;
+    right: 8px;
+  }
+}
+
+/* A filter a deep link applied, e.g. arriving from an Ask answer. Always
+   visible and always clearable — a narrowed list must never read as the whole. */
+.linkfilter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--green-soft);
+  border: 1px solid var(--green-line);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--green-ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.linkfilter:hover {
+  background: var(--primary-tint2);
+}
+
+/* ===========================================================================
+   Ask bar — the navy band at the head of the home page. Replaced the old
+   "needs attention" strip; its two figures live on as .askbar-glance.
+   =========================================================================== */
+.askbar {
+  background: var(--navy);
+  border-radius: var(--r-lg);
   box-shadow: var(--sh-navy);
   overflow: hidden;
-}
-.attn-label {
-  flex: 0 0 auto;
+  color: #fff;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  padding: 18px 22px;
-  border-right: 1px solid rgba(255, 255, 255, 0.12);
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.13em;
-  color: #8fa7dc;
-  text-transform: uppercase;
 }
-.attn-item {
-  flex: 1 1 168px;
-  min-width: 0;
+.askbar-top {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 16px;
   padding: 16px 20px;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  cursor: pointer;
-  text-align: left;
-  background: none;
-  transition: background 0.12s;
+  flex-wrap: wrap;
 }
-.attn-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-.attn-top {
+.askbar-label {
   display: flex;
   align-items: center;
   gap: 7px;
-}
-.attn-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
-.attn-val {
   font-family: var(--mono);
-  font-size: 19px;
-  font-weight: 700;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9fb0d0;
+  flex: none;
 }
-.attn-cap {
+.askbar-field {
+  flex: 1 1 380px;
+  min-width: 0;
+  display: flex;
+  gap: 9px;
+}
+.askbar-field input {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 12px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  outline: none;
+}
+.askbar-field input::placeholder {
+  color: #8296b8;
+}
+.askbar-field input:focus {
+  border-color: #4f82ff;
+  background: rgba(255, 255, 255, 0.12);
+}
+.askbar-field button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 18px;
+  background: var(--green);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.askbar-field button:hover:not(:disabled) {
+  background: var(--green-ink);
+}
+.askbar-field button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* The at-a-glance figures kept from the old band. */
+.askbar-glance {
+  display: flex;
+  gap: 10px;
+  flex: none;
+}
+.askbar-glance button {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 11px;
+  cursor: pointer;
+  text-align: left;
+}
+.askbar-glance button:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+.askbar-glance span {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.askbar-glance small {
+  font-size: 10.5px;
+  color: #9fb0d0;
+  white-space: nowrap;
+}
+.askbar-suggest {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.askbar-hint {
+  font-size: 12px;
+  color: #9fb0d0;
+}
+.askbar-chips {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.askbar-chips button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.askbar-chips button {
+  padding: 7px 12px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 999px;
+  font-size: 12px;
+  color: #d6dff0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.askbar-chips button:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+/* --- the answer --------------------------------------------------------- */
+.askbar-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  margin: 0 20px 18px;
+  padding: 16px 18px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 13px;
+}
+.askbar-prose {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #f2f5fa;
+}
+/* "Read as students in 8 STD, still owing" — the interpretation, above the
+   answer, so a misreading is caught before the figure is believed. */
+.askbar-reading {
   font-size: 11.5px;
-  color: #b9c7e8;
-  line-height: 1.4;
+  color: #9fb0d0;
+  padding-bottom: 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
-.attn-cta {
+.askbar-reading b {
+  color: #d6dff0;
+  font-weight: 600;
+}
+.askbar-err {
+  color: #ffc9c9;
+  font-size: 13px;
+}
+/* A question we couldn't parse. Amber edge so the figures inside read as
+   context rather than as the answer to what was asked. */
+.askbar-unsure {
+  border-color: rgba(232, 121, 43, 0.45);
+  background: rgba(232, 121, 43, 0.08);
+}
+.askbar-unsure .askbar-stats b {
+  color: #e8eef8;
+  font-weight: 500;
+}
+.askbar-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 9px;
+}
+.askbar-stats > div {
+  min-width: 0;
+  padding: 10px 13px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+}
+.askbar-stats span {
+  display: block;
+  font-size: 10.5px;
+  color: #9fb0d0;
+}
+.askbar-stats b {
+  display: block;
+  font-size: 16.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.askbar-stats small {
+  display: block;
+  font-size: 10.5px;
+  color: #8296b8;
+}
+/* The rows the answer was computed from — dark-surface table, own scroll. */
+.askbar-table {
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 11px;
+}
+.askbar-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.askbar-table th {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9fb0d0;
+  text-align: left;
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  white-space: nowrap;
+}
+.askbar-table td {
+  font-size: 12.5px;
+  color: #e8eef8;
+  padding: 9px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  white-space: nowrap;
+}
+.askbar-table th.num,
+.askbar-table td.num {
+  text-align: right;
+}
+.askbar-more {
+  padding: 8px 12px;
   font-size: 11px;
+  color: #8296b8;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+.askbar-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.askbar-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+.askbar-links button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 13px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 9px;
+  font-size: 12.5px;
   font-weight: 600;
   color: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.askbar-links button:hover {
+  background: var(--green);
+  border-color: var(--green);
+}
+.askbar-reset {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: #9fb0d0;
+  cursor: pointer;
+  flex: none;
+}
+.askbar-reset:hover {
+  color: #fff;
+}
+.askbar-note {
+  font-size: 11px;
+  color: #8296b8;
+}
+
+@media (max-width: 780px) {
+  .askbar-glance {
+    width: 100%;
+  }
+  .askbar-glance button {
+    flex: 1;
+  }
 }
 
 /* Launch groups + cards */
@@ -3605,10 +4266,26 @@ h4.section {
   color: var(--ink-3);
   white-space: nowrap;
 }
+/* Three fixed columns, NOT auto-fit.
+   `auto-fit` sized each row by how many cards it happened to contain, so the
+   3-card "Run the school" row and the 2-card "Configure" row had different card
+   widths and their edges did not line up down the page. A fixed track count keeps
+   every section on the same grid; a short row simply leaves a column empty. */
 .lcards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(292px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
+  align-items: start;
+}
+@media (max-width: 1080px) {
+  .lcards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .lcards {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .lcard {
   display: flex;
@@ -3712,10 +4389,23 @@ h4.section {
 }
 
 /* Locked (not entitled) row */
+/* Same three tracks as .lcards, for the same reason: with `auto-fit` this row
+   sized itself to its own card count and ran out of step with the sections above
+   it. Gap matches .lcards so the columns land in exactly the same places. */
 .lgroup-locked {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+@media (max-width: 1080px) {
+  .lgroup-locked {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .lgroup-locked {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .llock {
   display: flex;
