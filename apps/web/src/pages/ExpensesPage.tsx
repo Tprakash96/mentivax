@@ -85,6 +85,13 @@ function DayBook({ settings }: { settings: ExpenseSettings }) {
   const [categoryId, setCategoryId] = useState('');
   const [add, setAdd] = useState<null | LedgerKind>(null);
   const [editing, setEditing] = useState<LedgerEntry | null>(null);
+  const [detail, setDetail] = useState<null | {
+    title: string;
+    subtitle: string;
+    total: number;
+    tone: string;
+    filter: { kind?: LedgerKind; accountId?: string; status?: 'POSTED' | 'PENDING'; from?: string; to?: string };
+  }>(null);
 
   const range = useMemo(() => ({ from: from || undefined, to: to || undefined }), [from, to]);
   const overview = useAsync(() => api.expenses.overview(range), [from, to]);
@@ -109,46 +116,82 @@ function DayBook({ settings }: { settings: ExpenseSettings }) {
     entries.reload();
   };
 
+  // Open the read-only detail for a figure, scoped to the same date range.
+  const openDetail = (
+    title: string,
+    subtitle: string,
+    total: number,
+    tone: string,
+    filter: { kind?: LedgerKind; accountId?: string; status?: 'POSTED' | 'PENDING' },
+  ) => setDetail({ title, subtitle, total, tone, filter: { ...filter, from: from || undefined, to: to || undefined } });
+
+  // Soft delete: removes the voucher from lists and balances but keeps the row.
   const del = async (e: LedgerEntry) => {
-    await api.expenses.removeEntry(e.id);
-    toast(`${e.voucherNo} deleted`);
-    reload();
+    if (!window.confirm(`Remove voucher ${e.voucherNo} (${e.title})? It will drop out of the day book and balances.`)) return;
+    try {
+      await api.expenses.removeEntry(e.id);
+      toast(`${e.voucherNo} removed`);
+      reload();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not remove the voucher');
+    }
   };
 
   return (
     <>
       <div className="acct-cards">
         {(ov?.accounts ?? []).map((a) => (
-          <div key={a.id} className="acct-card">
+          <button
+            key={a.id}
+            className="acct-card"
+            onClick={() => openDetail(a.label, a.note || 'Account ledger', a.closing, '', { accountId: a.id })}
+          >
             <div className="acct-label">{a.label}</div>
             <div className="acct-bal mono">{formatMoney(a.closing)}</div>
             <div className="acct-note">
               {a.note}
               {a.awaiting > 0 && <span className="acct-await"> · {formatMoney(a.awaiting)} awaiting</span>}
             </div>
-          </div>
+            <div className="acct-view">View entries ›</div>
+          </button>
         ))}
       </div>
 
       <div className="kpi-strip">
-        <div className="kpi">
+        <button
+          className="kpi"
+          onClick={() => openDetail('Income', 'Money received · posted', ov?.income ?? 0, 'pos', { kind: 'INCOME', status: 'POSTED' })}
+        >
           <span>Income</span>
           <b className="mono pos">{formatMoney(ov?.income ?? 0)}</b>
-        </div>
-        <div className="kpi">
+          <span className="kpi-view">View entries ›</span>
+        </button>
+        <button
+          className="kpi"
+          onClick={() => openDetail('Expense', 'Money spent · posted', ov?.expense ?? 0, 'neg', { kind: 'EXPENSE', status: 'POSTED' })}
+        >
           <span>Expense</span>
           <b className="mono neg">{formatMoney(ov?.expense ?? 0)}</b>
-        </div>
+          <span className="kpi-view">View entries ›</span>
+        </button>
         {settings.approvalsOn && (
-          <div className="kpi">
+          <button
+            className="kpi"
+            onClick={() => openDetail('Awaiting approval', 'Vouchers pending sign-off', ov?.awaiting ?? 0, 'amb', { status: 'PENDING' })}
+          >
             <span>Awaiting approval</span>
             <b className="mono amb">{formatMoney(ov?.awaiting ?? 0)}</b>
-          </div>
+            <span className="kpi-view">View entries ›</span>
+          </button>
         )}
-        <div className="kpi">
+        <button
+          className="kpi"
+          onClick={() => openDetail('Cash in hand', 'All posted entries across books', ov?.closing ?? 0, '', { status: 'POSTED' })}
+        >
           <span>Cash in hand</span>
           <b className="mono">{formatMoney(ov?.closing ?? 0)}</b>
-        </div>
+          <span className="kpi-view">View entries ›</span>
+        </button>
       </div>
 
       <div className="tbar">
@@ -269,7 +312,114 @@ function DayBook({ settings }: { settings: ExpenseSettings }) {
           }}
         />
       )}
+
+      {detail && (
+        <LedgerDetailModal
+          title={detail.title}
+          subtitle={detail.subtitle}
+          total={detail.total}
+          tone={detail.tone}
+          filter={detail.filter}
+          categoriesOn={settings.categoriesOn}
+          onClose={() => setDetail(null)}
+        />
+      )}
     </>
+  );
+}
+
+/** Read-only list of the ledger entries behind a Day-book figure. */
+function LedgerDetailModal({
+  title,
+  subtitle,
+  total,
+  tone,
+  filter,
+  categoriesOn,
+  onClose,
+}: {
+  title: string;
+  subtitle: string;
+  total: number;
+  tone: string;
+  filter: { kind?: LedgerKind; accountId?: string; status?: 'POSTED' | 'PENDING'; from?: string; to?: string };
+  categoriesOn: boolean;
+  onClose: () => void;
+}) {
+  const { api } = useApi();
+  const q = useAsync(() => api.expenses.entries(filter), [JSON.stringify(filter)]);
+  const rows = q.data ?? [];
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 860, width: '95%' }}>
+        <div className="mh">
+          <div>
+            <b>
+              {title}
+              {rows.length ? ` · ${rows.length} ${rows.length === 1 ? 'entry' : 'entries'}` : ''}
+            </b>
+            <span>
+              {subtitle} — <b className={tone}>{formatMoney(total)}</b>
+            </span>
+          </div>
+          <button className="x" onClick={onClose}>
+            <Icon name="x" />
+          </button>
+        </div>
+        <div className="mb" style={{ padding: 0 }}>
+          <div className="card-t" style={{ border: 'none', boxShadow: 'none', borderRadius: 0, minHeight: 0, overflow: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Voucher</th>
+                  <th>Title</th>
+                  <th>Account</th>
+                  {categoriesOn && <th>Category</th>}
+                  <th>Paid to / from</th>
+                  <th className="num">Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((e) => (
+                  <tr key={e.id}>
+                    <td className="mono" style={{ fontSize: '12.5px', color: 'var(--ink-2)' }}>{dmy(e.date)}</td>
+                    <td className="mono" style={{ fontSize: '12.5px' }}>{e.voucherNo}</td>
+                    <td>
+                      <b style={{ fontWeight: 600 }}>{e.title}</b>
+                    </td>
+                    <td>
+                      <span className="cls">{e.accountLabel}</span>
+                    </td>
+                    {categoriesOn && <td style={{ color: 'var(--ink-2)' }}>{e.categoryLabel ?? 'Uncategorised'}</td>}
+                    <td style={{ color: 'var(--ink-2)' }}>{e.person || '—'}</td>
+                    <td className={`num mono ${e.kind === 'INCOME' ? 'pos' : 'neg'}`} style={{ fontWeight: 650 }}>
+                      {e.kind === 'INCOME' ? '+' : '−'}
+                      {formatMoney(e.amount)}
+                    </td>
+                    <td>
+                      <span className={`tag ${e.status === 'POSTED' ? 'paid' : 'due'}`}>
+                        <i />
+                        {e.status === 'POSTED' ? 'Posted' : 'Pending'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {q.loading && <div className="state">Loading…</div>}
+          {!q.loading && rows.length === 0 && <div className="state">No entries here.</div>}
+        </div>
+        <div className="mf">
+          <button className="btn" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

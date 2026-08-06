@@ -153,6 +153,7 @@ export class ExpensesService {
     const where: Prisma.LedgerEntryWhereInput = {
       organizationId: t.organizationId,
       academicYearId: t.academicYearId,
+      isActive: true,
     };
     if (f.kind === 'INCOME' || f.kind === 'EXPENSE') where.kind = f.kind;
     if (f.status === 'POSTED' || f.status === 'PENDING') where.status = f.status;
@@ -244,7 +245,9 @@ export class ExpensesService {
   async removeEntry(t: TenantContext, id: string) {
     const existing = await this.prisma.ledgerEntry.findFirst({ where: { id, ...this.org(t) } });
     if (!existing) throw new NotFoundException('Entry not found');
-    await this.prisma.ledgerEntry.delete({ where: { id } });
+    // Soft delete: keep the row (preserves history + the voucher number) but
+    // drop it from every list and balance by flipping isActive off.
+    await this.prisma.ledgerEntry.update({ where: { id }, data: { isActive: false } });
   }
 
   async approveEntry(t: TenantContext, id: string) {
@@ -278,7 +281,7 @@ export class ExpensesService {
       this.prisma.expenseAccount.findMany({ where: this.org(t), orderBy: { rank: 'asc' } }),
       this.getSettings(t),
       this.prisma.ledgerEntry.findMany({
-        where: { organizationId: t.organizationId, academicYearId: t.academicYearId },
+        where: { organizationId: t.organizationId, academicYearId: t.academicYearId, isActive: true },
         select: { accountId: true, kind: true, amount: true, status: true, date: true },
       }),
     ]);
@@ -333,6 +336,7 @@ export class ExpensesService {
         organizationId: t.organizationId,
         academicYearId: t.academicYearId,
         status: 'POSTED',
+        isActive: true,
         ...(f.accountId ? { accountId: f.accountId } : {}),
       },
       orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
@@ -376,7 +380,7 @@ export class ExpensesService {
   async report(t: TenantContext) {
     const [entries, categories] = await Promise.all([
       this.prisma.ledgerEntry.findMany({
-        where: { organizationId: t.organizationId, academicYearId: t.academicYearId },
+        where: { organizationId: t.organizationId, academicYearId: t.academicYearId, isActive: true },
         include: { category: { select: { label: true, color: true, kind: true, budget: true } } },
       }),
       this.prisma.expenseCategory.findMany({ where: this.org(t), orderBy: { rank: 'asc' } }),
@@ -482,7 +486,7 @@ export class ExpensesService {
     const [cats, entries] = await Promise.all([
       this.prisma.expenseCategory.findMany({ where: this.org(t), orderBy: { rank: 'asc' } }),
       this.prisma.ledgerEntry.findMany({
-        where: { organizationId: t.organizationId, academicYearId: t.academicYearId, status: 'POSTED' },
+        where: { organizationId: t.organizationId, academicYearId: t.academicYearId, status: 'POSTED', isActive: true },
         select: { categoryId: true, amount: true },
       }),
     ]);
@@ -543,7 +547,7 @@ export class ExpensesService {
     const [vendors, entries] = await Promise.all([
       this.prisma.vendor.findMany({ where: this.org(t), orderBy: { name: 'asc' } }),
       this.prisma.ledgerEntry.findMany({
-        where: { organizationId: t.organizationId, academicYearId: t.academicYearId, kind: 'EXPENSE' },
+        where: { organizationId: t.organizationId, academicYearId: t.academicYearId, kind: 'EXPENSE', isActive: true },
         select: { person: true, amount: true, status: true },
       }),
     ]);

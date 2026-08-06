@@ -3847,6 +3847,25 @@ button.acct-card:hover .acct-view { opacity: 1; }
   flex-direction: column;
   gap: 4px;
 }
+button.kpi {
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+button.kpi:hover {
+  background: var(--green-soft);
+}
+.kpi-view {
+  font-size: 10.5px !important;
+  color: var(--blue) !important;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+button.kpi:hover .kpi-view {
+  opacity: 1;
+}
 .kpi span {
   font-size: 11.5px;
   color: var(--ink-4);

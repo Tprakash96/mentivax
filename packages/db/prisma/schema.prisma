@@ -719,6 +719,9 @@ model LedgerEntry {
   status         LedgerStatus     @default(POSTED)
   /// True once an over-limit expense has been approved (blocks re-pending).
   signed         Boolean          @default(false)
+  /// Soft delete: a removed voucher stays in the DB but is excluded from all
+  /// lists and balances, so the ledger's history and voucher numbers survive.
+  isActive       Boolean          @default(true)
   createdAt      DateTime         @default(now())
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   account        ExpenseAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
