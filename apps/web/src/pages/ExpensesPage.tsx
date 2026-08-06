@@ -11,6 +11,7 @@ import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toast';
 import { useApi } from '../lib/api';
 import { useAsync } from '../lib/useAsync';
+import { findHeaderRow, readFileToGrid, SPREADSHEET_ACCEPT } from '../lib/spreadsheet';
 
 type Tab = 'ledger' | 'approvals' | 'statement' | 'reports' | 'categories' | 'vendors';
 
@@ -84,6 +85,7 @@ function DayBook({ settings }: { settings: ExpenseSettings }) {
   const [to, setTo] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [add, setAdd] = useState<null | LedgerKind>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<LedgerEntry | null>(null);
   const [detail, setDetail] = useState<null | {
     title: string;
@@ -221,6 +223,10 @@ function DayBook({ settings }: { settings: ExpenseSettings }) {
         </div>
         {can('expenses:write') && (
           <>
+            <button className="btn" onClick={() => setImportOpen(true)}>
+              <Icon name="import" size={15} />
+              Import
+            </button>
             <button className="btn" onClick={() => setAdd('INCOME')}>
               <Icon name="plus" size={15} />
               Income
@@ -324,7 +330,322 @@ function DayBook({ settings }: { settings: ExpenseSettings }) {
           onClose={() => setDetail(null)}
         />
       )}
+
+      {importOpen && (
+        <ImportEntriesModal
+          settings={settings}
+          onClose={() => setImportOpen(false)}
+          onDone={(n) => {
+            setImportOpen(false);
+            reload();
+            toast(`${n} ${n === 1 ? 'entry' : 'entries'} imported`);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+/** Column labels the day-book importer knows, and its identity columns. */
+const ENTRY_KEYS = [
+  'type', 'kind', 'income', 'expense', 'direction', 'title', 'particular', 'name',
+  'amount', 'value', 'paid', 'payee', 'person', 'vendor', 'source', 'from', 'to',
+  'date', 'book', 'account', 'fund', 'category', 'head', 'mode', 'method', 'note', 'remark', 'description',
+];
+const ENTRY_ID_KEYS = ['title', 'particular', 'amount', 'type', 'kind'];
+
+interface ImportEntryRow {
+  kind: LedgerKind;
+  title: string;
+  person: string;
+  amount: number; // paise
+  amountText: string; // for display when invalid
+  mode: ExpenseMode;
+  date: string;
+  accountId: string | null;
+  accountLabel: string;
+  categoryId: string | null;
+  categoryLabel: string;
+  note: string;
+  error?: string;
+}
+
+/**
+ * Bulk-import day-book entries from a CSV/Excel file. Each row is one income or
+ * expense; the Book column maps to an account (defaults to the first), Category
+ * to a matching head, and the amount/mode/date/payee map straight across.
+ */
+function ImportEntriesModal({
+  settings,
+  onClose,
+  onDone,
+}: {
+  settings: ExpenseSettings;
+  onClose: () => void;
+  onDone: (n: number) => void;
+}) {
+  const { api } = useApi();
+  const accounts = useAsync(() => api.expenses.accounts.list(), []);
+  const categories = useAsync(() => (settings.categoriesOn ? api.expenses.categories.list() : Promise.resolve([])), []);
+  const [rows, setRows] = useState<ImportEntryRow[]>([]);
+  const [fileName, setFileName] = useState('');
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<{ created: number; failed: { title: string; error: string }[] } | null>(null);
+
+  const acctList = accounts.data ?? [];
+  const catList = categories.data ?? [];
+
+  const applyGrid = (grid: string[][]) => {
+    const cleaned = grid.filter((r) => r.some((c) => c.trim() !== ''));
+    const hIdx = findHeaderRow(cleaned, ENTRY_KEYS, ENTRY_ID_KEYS);
+    const body = hIdx >= 0 ? cleaned.slice(hIdx) : cleaned;
+    if (body.length < 2) {
+      setRows([]);
+      setParseError('No rows found — the file needs a header row (Title, Amount, …) plus at least one entry.');
+      return;
+    }
+    setParseError(null);
+    const header = body[0]!.map((h) => h.trim().toLowerCase());
+    const col = (...names: string[]) => {
+      for (const nm of names) {
+        const i = header.findIndex((h) => h === nm || h.includes(nm));
+        if (i >= 0) return i;
+      }
+      return -1;
+    };
+    const iType = col('type', 'kind', 'direction', 'in/out');
+    const iTitle = col('title', 'particular', 'name');
+    const iAmount = col('amount', 'value');
+    const iPerson = col('paid to', 'payee', 'person', 'vendor', 'source', 'paid', 'from', 'to');
+    const iDate = col('date');
+    const iBook = col('book', 'account', 'fund');
+    const iCategory = col('category', 'head');
+    const iMode = col('mode', 'method', 'payment');
+    const iNote = col('note', 'remark', 'description');
+
+    const parsed: ImportEntryRow[] = body
+      .slice(1)
+      .map((r): ImportEntryRow => {
+        const typeRaw = ((iType >= 0 ? r[iType] : '') ?? '').toLowerCase();
+        const kind: LedgerKind =
+          typeRaw.includes('inc') || typeRaw.includes('receipt') || typeRaw.includes('credit') || typeRaw.trim() === 'in'
+            ? 'INCOME'
+            : 'EXPENSE';
+        const title = (iTitle >= 0 ? r[iTitle] : r[0])?.trim() ?? '';
+        const amountText = ((iAmount >= 0 ? r[iAmount] : '') ?? '').trim();
+        const num = parseFloat(amountText.replace(/[^0-9.]/g, ''));
+        const amount = Number.isFinite(num) && num > 0 ? rupeesToPaise(num) : 0;
+
+        const bookRaw = ((iBook >= 0 ? r[iBook] : '') ?? '').trim();
+        const account = bookRaw
+          ? acctList.find((a) => a.label.toLowerCase() === bookRaw.toLowerCase())
+          : acctList[0];
+
+        const catRaw = ((iCategory >= 0 ? r[iCategory] : '') ?? '').trim();
+        const cat = catRaw
+          ? catList.find((c) => c.label.toLowerCase() === catRaw.toLowerCase() && c.kind === kind)
+          : undefined;
+
+        const modeRaw = ((iMode >= 0 ? r[iMode] : '') ?? '').toLowerCase();
+        const mode: ExpenseMode = modeRaw.includes('upi') || modeRaw.includes('gpay')
+          ? 'UPI'
+          : modeRaw.includes('bank') || modeRaw.includes('transfer') || modeRaw.includes('neft')
+            ? 'BANK'
+            : modeRaw.includes('cheque') || modeRaw.includes('check')
+              ? 'CHEQUE'
+              : 'CASH';
+
+        const dateRaw = ((iDate >= 0 ? r[iDate] : '') ?? '').trim();
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : today();
+
+        let error: string | undefined;
+        if (!title) error = 'Missing title';
+        else if (amount <= 0) error = 'Invalid amount';
+        else if (bookRaw && !account) error = `Unknown book "${bookRaw}"`;
+
+        return {
+          kind,
+          title,
+          person: (iPerson >= 0 ? r[iPerson] : '')?.trim() ?? '',
+          amount,
+          amountText,
+          mode,
+          date,
+          accountId: account?.id ?? null,
+          accountLabel: account?.label ?? bookRaw,
+          categoryId: cat?.id ?? null,
+          categoryLabel: cat?.label ?? (catRaw || '—'),
+          note: (iNote >= 0 ? r[iNote] : '')?.trim() ?? '',
+          error,
+        };
+      })
+      .filter((r) => r.title || r.amountText);
+    setRows(parsed);
+    setResult(null);
+  };
+
+  const onFile = async (f: File) => {
+    setFileName(f.name);
+    setParseError(null);
+    try {
+      applyGrid(await readFileToGrid(f, ENTRY_KEYS, ENTRY_ID_KEYS));
+    } catch {
+      setRows([]);
+      setParseError('Could not read that file. Try re-saving it as .xlsx or .csv.');
+    }
+  };
+
+  const valid = rows.filter((r) => !r.error && r.accountId);
+  const invalid = rows.filter((r) => r.error || !r.accountId);
+
+  const runImport = async () => {
+    setImporting(true);
+    const failed: { title: string; error: string }[] = [];
+    let created = 0;
+    for (const r of valid) {
+      try {
+        await api.expenses.createEntry({
+          kind: r.kind,
+          title: r.title,
+          person: r.person || undefined,
+          amount: r.amount,
+          mode: r.mode,
+          date: r.date,
+          accountId: r.accountId!,
+          categoryId: settings.categoriesOn ? r.categoryId ?? undefined : undefined,
+          note: r.note || undefined,
+        });
+        created++;
+      } catch (e) {
+        failed.push({ title: r.title, error: e instanceof Error ? e.message : 'failed' });
+      }
+    }
+    setImporting(false);
+    setResult({ created, failed });
+    if (failed.length === 0) onDone(created);
+  };
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 820, width: '96%' }}>
+        <div className="mh">
+          <div>
+            <b>Import day book</b>
+            <span>Upload a CSV or Excel file — one income or expense per row</span>
+          </div>
+          <button className="x" onClick={onClose}>
+            <Icon name="x" />
+          </button>
+        </div>
+        <div className="mb" style={{ maxHeight: '72vh', overflowY: 'auto' }}>
+          <div className="import-drop">
+            <input
+              id="entries-import-file"
+              type="file"
+              accept={SPREADSHEET_ACCEPT}
+              style={{ display: 'none' }}
+              onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+            />
+            <label htmlFor="entries-import-file" className="import-tile">
+              <span className="import-plus">+</span>
+              <div>
+                <b>{fileName || 'Choose a CSV or Excel file'}</b>
+                <span>Columns: Type (income/expense) · Title · Amount · Paid to/from · Date · Book · Category · Mode · Note</span>
+              </div>
+            </label>
+          </div>
+
+          {parseError && <div className="state err" style={{ marginTop: 10 }}>{parseError}</div>}
+
+          {rows.length > 0 && !result && (
+            <>
+              <div className="import-summary">
+                <span className="pos">{valid.length} ready</span>
+                {invalid.length > 0 && <span className="neg">{invalid.length} need attention</span>}
+              </div>
+              <div className="card-t" style={{ maxHeight: 320, overflow: 'auto' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Title</th>
+                      <th>Paid to / from</th>
+                      <th>Book</th>
+                      {settings.categoriesOn && <th>Category</th>}
+                      <th className="num">Amount</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr key={i}>
+                        <td>
+                          <span className={`tag ${r.kind === 'INCOME' ? 'paid' : 'due'}`}>
+                            <i />
+                            {r.kind === 'INCOME' ? 'Income' : 'Expense'}
+                          </span>
+                        </td>
+                        <td><b style={{ fontWeight: 600 }}>{r.title || '—'}</b></td>
+                        <td style={{ color: 'var(--ink-2)' }}>{r.person || '—'}</td>
+                        <td><span className="cls">{r.accountLabel || '—'}</span></td>
+                        {settings.categoriesOn && <td style={{ color: 'var(--ink-2)' }}>{r.categoryLabel}</td>}
+                        <td className={`num mono ${r.kind === 'INCOME' ? 'pos' : 'neg'}`} style={{ fontWeight: 650 }}>
+                          {r.amount > 0 ? `${r.kind === 'INCOME' ? '+' : '−'}${formatMoney(r.amount)}` : r.amountText || '—'}
+                        </td>
+                        <td>
+                          {r.error || !r.accountId ? (
+                            <span className="tag due" title={r.error}>
+                              <i />
+                              {r.error ?? 'No book'}
+                            </span>
+                          ) : (
+                            <span className="tag paid">
+                              <i />
+                              Ready
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {result && (
+            <div className="state" style={{ marginTop: 12 }}>
+              <b className="pos">
+                {result.created} {result.created === 1 ? 'entry' : 'entries'} imported.
+              </b>
+              {result.failed.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <b className="neg">{result.failed.length} failed:</b>
+                  <ul style={{ margin: '6px 0 0 18px' }}>
+                    {result.failed.map((f, i) => (
+                      <li key={i}>
+                        {f.title} — {f.error}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="mf">
+          <button className="btn" onClick={onClose}>
+            {result ? 'Close' : 'Cancel'}
+          </button>
+          {!result && (
+            <button className="btn grn" disabled={valid.length === 0 || importing} onClick={runImport}>
+              {importing ? 'Importing…' : `Import ${valid.length} ${valid.length === 1 ? 'entry' : 'entries'}`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
