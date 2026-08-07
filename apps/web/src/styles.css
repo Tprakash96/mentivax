@@ -426,6 +426,28 @@ h4,
   font-size: 12px;
   color: var(--ink-3);
 }
+.view-rows {
+  display: flex;
+  flex-direction: column;
+}
+.view-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.view-label {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.view-value {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--ink);
+  text-align: right;
+}
 .coll-sec {
   display: flex;
   align-items: center;

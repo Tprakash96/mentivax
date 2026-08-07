@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { formatMoney, paiseToRupees, rupeesToPaise, type ExpenseMode, type LedgerKind } from '@mentivax/core';
 import type {
@@ -91,6 +91,7 @@ function DayBook({ settings }: { settings: ExpenseSettings }) {
   const [add, setAdd] = useState<null | LedgerKind>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<LedgerEntry | null>(null);
+  const [viewing, setViewing] = useState<LedgerEntry | null>(null);
   const [detail, setDetail] = useState<null | {
     title: string;
     subtitle: string;
@@ -282,6 +283,10 @@ function DayBook({ settings }: { settings: ExpenseSettings }) {
                         Edit
                       </button>
                     )}
+                    <button className="btn sm grn" onClick={() => setViewing(e)}>
+                      <Icon name="eye" size={13} />
+                      View
+                    </button>
                     {can('expenses:delete') && (
                       <button className="btn sm" onClick={() => void del(e)} title="Delete">
                         <Icon name="trash" size={13} />
@@ -339,7 +344,90 @@ function DayBook({ settings }: { settings: ExpenseSettings }) {
           }}
         />
       )}
+
+      {viewing && (
+        <EntryViewModal entry={viewing} categoriesOn={settings.categoriesOn} onClose={() => setViewing(null)} />
+      )}
     </>
+  );
+}
+
+/** Read-only detail of a single day-book voucher. */
+function EntryViewModal({
+  entry,
+  categoriesOn,
+  onClose,
+}: {
+  entry: LedgerEntry;
+  categoriesOn: boolean;
+  onClose: () => void;
+}) {
+  const rows: { label: string; value: ReactNode }[] = [
+    { label: 'Voucher', value: <span className="mono">{entry.voucherNo}</span> },
+    { label: 'Date', value: dmy(entry.date) },
+    {
+      label: 'Type',
+      value: (
+        <span className={`tag ${entry.kind === 'INCOME' ? 'paid' : 'due'}`}>
+          <i />
+          {entry.kind === 'INCOME' ? 'Income' : 'Expense'}
+        </span>
+      ),
+    },
+    { label: 'Paid to / from', value: entry.person || '—' },
+    { label: 'Book', value: <span className="cls">{entry.accountLabel}</span> },
+    ...(categoriesOn
+      ? [{ label: 'Category', value: <span className="cls">{entry.categoryLabel ?? 'Uncategorised'}</span> }]
+      : []),
+    { label: 'Mode', value: MODE_LABEL[entry.mode] },
+    {
+      label: 'Status',
+      value: (
+        <span className={`tag ${entry.status === 'POSTED' ? 'paid' : 'due'}`}>
+          <i />
+          {entry.status === 'POSTED' ? 'Posted' : 'Pending'}
+        </span>
+      ),
+    },
+    { label: 'Note', value: entry.note || '—' },
+  ];
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520, width: '94%' }}>
+        <div className="mh">
+          <div>
+            <b>{entry.title}</b>
+            <span>{entry.voucherNo} · voucher detail</span>
+          </div>
+          <button className="x" onClick={onClose}>
+            <Icon name="x" />
+          </button>
+        </div>
+        <div className="mb">
+          <div
+            className={`view-amt ${entry.kind === 'INCOME' ? 'pos' : 'neg'}`}
+            style={{ fontSize: 30, fontWeight: 750, letterSpacing: '-0.01em', marginBottom: 14 }}
+          >
+            {entry.kind === 'INCOME' ? '+' : '−'}
+            {formatMoney(entry.amount)}
+          </div>
+          <div className="view-rows">
+            {rows.map((r) => (
+              <div className="view-row" key={r.label}>
+                <span className="view-label">{r.label}</span>
+                <span className="view-value">{r.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="mf">
+          <button className="btn" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
