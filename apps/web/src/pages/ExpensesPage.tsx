@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { formatMoney, paiseToRupees, rupeesToPaise, type ExpenseMode, type LedgerKind } from '@mentivax/core';
 import type {
   ExpenseAccount,
@@ -79,7 +80,10 @@ export function ExpensesPage() {
 function DayBook({ settings }: { settings: ExpenseSettings }) {
   const { api, can } = useApi();
   const toast = useToast();
-  const [kind, setKind] = useState<'' | LedgerKind>('');
+  // The All / Income / Expense filter now lives in the sidebar, driven by ?kind=.
+  const [params] = useSearchParams();
+  const kindParam = params.get('kind');
+  const kind: '' | LedgerKind = kindParam === 'income' ? 'INCOME' : kindParam === 'expense' ? 'EXPENSE' : '';
   const [search, setSearch] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -197,13 +201,6 @@ function DayBook({ settings }: { settings: ExpenseSettings }) {
       </div>
 
       <div className="tbar">
-        <div className="seg">
-          {(['', 'INCOME', 'EXPENSE'] as const).map((k) => (
-            <button key={k} className={kind === k ? 'on' : undefined} onClick={() => setKind(k)}>
-              {k === '' ? 'All' : k === 'INCOME' ? 'Income' : 'Expense'}
-            </button>
-          ))}
-        </div>
         {settings.categoriesOn && (
           <select className="minisel" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
             <option value="">All categories</option>

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { brand } from '@mentivax/ui';
 import { MODULE_MAP, PERMISSION_MAP } from '@mentivax/core';
 import { Icon } from './components/Icon';
@@ -42,6 +42,12 @@ interface NavItem {
   permission?: string;
   /** Optional group heading shown above this item in the sidebar. */
   section?: string;
+  /**
+   * A day-book kind filter ('' = all). Marks a link whose active state depends
+   * on the `?kind=` query, not just the pathname, so All/Income/Expense on the
+   * same /expenses path highlight independently.
+   */
+  kind?: '' | 'income' | 'expense';
 }
 
 /**
@@ -89,7 +95,11 @@ const CONTEXTS: ModuleContext[] = [
     code: 'AC',
     label: 'Expenses & accounts',
     match: ['/expenses'],
-    items: [{ to: '/expenses', label: 'Day book', icon: 'card', module: 'expenses', permission: 'expenses:read' }],
+    items: [
+      { to: '/expenses', label: 'All', icon: 'card', kind: '', section: 'Day book', module: 'expenses', permission: 'expenses:read' },
+      { to: '/expenses?kind=income', label: 'Income', icon: 'arrowLeft', kind: 'income', section: 'Day book', module: 'expenses', permission: 'expenses:read' },
+      { to: '/expenses?kind=expense', label: 'Expense', icon: 'arrowRight', kind: 'expense', section: 'Day book', module: 'expenses', permission: 'expenses:read' },
+    ],
   },
   {
     key: 'staff',
@@ -299,7 +309,8 @@ function OrgMenu() {
 
 export function App() {
   const { booting, isAuthenticated, isPlatformAdmin, hasModule, can, currentOrg } = useApi();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const currentKind = new URLSearchParams(search).get('kind') ?? '';
   const navigate = useNavigate();
   const meta = TITLES[pathname] ?? TITLES[`/${pathname.split('/')[1]}`] ?? { title: 'Mentivax', sub: '' };
 
@@ -360,15 +371,28 @@ export function App() {
           </div>
         </div>
         <nav className="nav">
-          {ctx.items.filter(allowed).map((n, i, arr) => (
-            <Fragment key={n.to}>
-              {n.section && n.section !== arr[i - 1]?.section && <div className="sec">{n.section}</div>}
-              <NavLink to={n.to} className={({ isActive }) => `nv${isActive ? ' on' : ''}`}>
-                <Icon name={n.icon} />
-                {n.label}
-              </NavLink>
-            </Fragment>
-          ))}
+          {ctx.items.filter(allowed).map((n, i, arr) => {
+            // Kind-filter links share the /expenses path, so their active state
+            // depends on the ?kind= query rather than NavLink's pathname match.
+            const isFilter = n.kind !== undefined;
+            const filterActive = isFilter && pathname === '/expenses' && currentKind === n.kind;
+            return (
+              <Fragment key={`${n.to}:${n.label}`}>
+                {n.section && n.section !== arr[i - 1]?.section && <div className="sec">{n.section}</div>}
+                {isFilter ? (
+                  <Link to={n.to} className={`nv${filterActive ? ' on' : ''}`}>
+                    <Icon name={n.icon} />
+                    {n.label}
+                  </Link>
+                ) : (
+                  <NavLink to={n.to} className={({ isActive }) => `nv${isActive ? ' on' : ''}`}>
+                    <Icon name={n.icon} />
+                    {n.label}
+                  </NavLink>
+                )}
+              </Fragment>
+            );
+          })}
         </nav>
         <div className="foot">
           <OrgMenu />
